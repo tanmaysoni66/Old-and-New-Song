@@ -347,93 +347,95 @@ export default function ActivitiesModal({
         {activeTab === 'polls' && (
           <div className="space-y-4">
             
-            {!showCreatePoll ? (
-              <button
-                onClick={() => setShowCreatePoll(true)}
-                className="w-full py-2.5 px-4 rounded-xl bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 text-xs font-semibold flex items-center justify-center gap-2 border border-blue-500/30 transition-colors"
-              >
-                <Plus className="w-4 h-4" />
-                <span>Start a new poll</span>
-              </button>
-            ) : (
-              /* Create Poll Form */
-              <form onSubmit={handleCreatePoll} className="p-4 rounded-2xl bg-slate-800/80 border border-slate-700 space-y-3 text-xs animate-in zoom-in-95">
-                <div className="flex items-center justify-between">
-                  <span className="font-bold text-white">Create a Poll</span>
-                  <button
-                    type="button"
-                    onClick={() => setShowCreatePoll(false)}
-                    className="text-slate-400 hover:text-white"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                </div>
-
-                <div>
-                  <label className="block text-slate-300 mb-1">Question</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. Do you understand this theorem?"
-                    value={newPollQuestion}
-                    onChange={(e) => setNewPollQuestion(e.target.value)}
-                    className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-white outline-none focus:border-blue-500"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <label className="block text-slate-300">Options</label>
-                  {newPollOptions.map((opt, i) => (
-                    <div key={i} className="flex items-center gap-2">
-                      <input
-                        type="text"
-                        required
-                        value={opt}
-                        onChange={(e) => {
-                          const updated = [...newPollOptions];
-                          updated[i] = e.target.value;
-                          setNewPollOptions(updated);
-                        }}
-                        className="flex-1 px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-white outline-none focus:border-blue-500 text-xs"
-                      />
-                      {newPollOptions.length > 2 && (
-                        <button
-                          type="button"
-                          onClick={() => setNewPollOptions(newPollOptions.filter((_, idx) => idx !== i))}
-                          className="p-1 text-slate-500 hover:text-rose-400"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      )}
-                    </div>
-                  ))}
-                  {newPollOptions.length < 5 && (
+            {isHost && (
+              !showCreatePoll ? (
+                <button
+                  onClick={() => setShowCreatePoll(true)}
+                  className="w-full py-2.5 px-4 rounded-xl bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 text-xs font-semibold flex items-center justify-center gap-2 border border-blue-500/30 transition-colors"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Start a new poll</span>
+                </button>
+              ) : (
+                /* Create Poll Form */
+                <form onSubmit={handleCreatePoll} className="p-4 rounded-2xl bg-slate-800/80 border border-slate-700 space-y-3 text-xs animate-in zoom-in-95">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-white">Create a Poll</span>
                     <button
                       type="button"
-                      onClick={() => setNewPollOptions([...newPollOptions, `Option ${newPollOptions.length + 1}`])}
-                      className="text-xs text-blue-400 hover:underline flex items-center gap-1 font-semibold"
+                      onClick={() => setShowCreatePoll(false)}
+                      className="text-slate-400 hover:text-white"
                     >
-                      + Add option
+                      <X className="w-4 h-4" />
                     </button>
-                  )}
-                </div>
+                  </div>
 
-                <div className="pt-2 flex justify-end gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setShowCreatePoll(false)}
-                    className="px-3 py-1.5 rounded-lg bg-slate-700 text-slate-300"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    className="px-4 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold"
-                  >
-                    Launch
-                  </button>
-                </div>
-              </form>
+                  <div>
+                    <label className="block text-slate-300 mb-1">Question</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. Do you understand this theorem?"
+                      value={newPollQuestion}
+                      onChange={(e) => setNewPollQuestion(e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-white outline-none focus:border-blue-500"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="block text-slate-300">Options</label>
+                    {newPollOptions.map((opt, i) => (
+                      <div key={i} className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          required
+                          value={opt}
+                          onChange={(e) => {
+                            const updated = [...newPollOptions];
+                            updated[i] = e.target.value;
+                            setNewPollOptions(updated);
+                          }}
+                          className="flex-1 px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-white outline-none focus:border-blue-500 text-xs"
+                        />
+                        {newPollOptions.length > 2 && (
+                          <button
+                            type="button"
+                            onClick={() => setNewPollOptions(newPollOptions.filter((_, idx) => idx !== i))}
+                            className="p-1 text-slate-500 hover:text-rose-400"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                    {newPollOptions.length < 5 && (
+                      <button
+                        type="button"
+                        onClick={() => setNewPollOptions([...newPollOptions, `Option ${newPollOptions.length + 1}`])}
+                        className="text-xs text-blue-400 hover:underline flex items-center gap-1 font-semibold"
+                      >
+                        + Add option
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="pt-2 flex justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowCreatePoll(false)}
+                      className="px-3 py-1.5 rounded-lg bg-slate-700 text-slate-300"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      className="px-4 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold"
+                    >
+                      Launch
+                    </button>
+                  </div>
+                </form>
+              )
             )}
 
             {/* Polls List */}

@@ -9,6 +9,8 @@ interface MeetingInfoPanelProps {
   onClose: () => void;
   onCopyLink: () => void;
   copied: boolean;
+  isHost?: boolean;
+  onClaimHost?: () => void;
 }
 
 export default function MeetingInfoPanel({ 
@@ -16,7 +18,9 @@ export default function MeetingInfoPanel({
   isOpen, 
   onClose, 
   onCopyLink,
-  copied 
+  copied,
+  isHost = false,
+  onClaimHost,
 }: MeetingInfoPanelProps) {
   const [activeTab, setActiveTab] = useState<'info' | 'attachments'>('info');
 
@@ -86,12 +90,20 @@ export default function MeetingInfoPanel({
             </button>
 
             <div className="pt-2 text-[11px] text-slate-400 space-y-1">
-              <p>Dial-in: (US) +1 415-555-0199</p>
-              <p>PIN: 482 910 234#</p>
-              <p className="text-slate-500 pt-2">
-                More phone numbers available globally.
-              </p>
+              <p>Meeting ID: <span className="font-mono text-indigo-400">{roomId}</span></p>
+              <p>Host Status: <span className="font-semibold text-slate-200">{isHost ? '👑 Host / Admin' : '👤 Participant'}</span></p>
             </div>
+
+            {!isHost && onClaimHost && (
+              <div className="pt-3 border-t border-slate-800">
+                <button
+                  onClick={onClaimHost}
+                  className="w-full py-2 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-400 text-xs font-semibold flex items-center justify-center gap-1.5 border border-amber-500/30 transition-colors"
+                >
+                  <span>👑 Claim Host Role (Admin PIN)</span>
+                </button>
+              </div>
+            )}
           </>
         ) : (
           <div className="text-center py-12 text-slate-500 text-xs space-y-2">

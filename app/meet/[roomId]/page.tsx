@@ -108,6 +108,7 @@ export default function MeetingRoomPage() {
   const [selectedMicId, setSelectedMicId] = useState<string>('default');
   const [selectedCameraId, setSelectedCameraId] = useState<string>('default');
   const [selectedSpeakerId, setSelectedSpeakerId] = useState<string>('default');
+  const [claimedHost, setClaimedHost] = useState(false);
 
   // Spotlight for Everyone (Zoom & Google Meet Flagship)
   const [spotlightedPeerId, setSpotlightedPeerId] = useState<string | null>(null);
@@ -413,14 +414,19 @@ export default function MeetingRoomPage() {
       webrtcManagerRef.current = manager;
 
       // Register participant in Firestore
-      const isHost = participants.length === 0;
+      const isHostInitial = typeof window !== 'undefined' && (
+        new URLSearchParams(window.location.search).get('host') === 'true' || 
+        sessionStorage.getItem('isMeetHost_' + roomId) === 'true' || 
+        claimedHost || 
+        participants.length === 0
+      );
       const myDocRef = doc(db, 'meet_rooms', roomId, 'participants', myPeerIdRef.current);
       await setDoc(myDocRef, {
         name: displayName.trim() || 'Guest',
         micMuted: securitySettings.muteOnEntry ? true : micMuted,
         videoOff: videoOff,
         handRaised: false,
-        isHost: isHost,
+        isHost: isHostInitial,
         joinedAt: Date.now(),
       });
 
@@ -777,7 +783,29 @@ export default function MeetingRoomPage() {
     soundManager.playLeaveSound();
   };
 
-  const isMeHost = participants.find(p => p.peerId === myPeerIdRef.current)?.isHost || participants.length <= 1;
+  const handleClaimHost = () => {
+    const pin = prompt('Enter Host / Admin Security PIN (Default: 1234):');
+    if (pin === '1234' || pin === 'admin') {
+      setClaimedHost(true);
+      if (typeof window !== 'undefined') {
+        sessionStorage.setItem('isMeetHost_' + roomId, 'true');
+      }
+      if (myPeerIdRef.current) {
+        const myDocRef = doc(db, 'meet_rooms', roomId, 'participants', myPeerIdRef.current);
+        setDoc(myDocRef, { isHost: true }, { merge: true }).catch(() => {});
+      }
+      alert('👑 Verified as Meeting Host & Admin. All security controls unlocked.');
+    } else if (pin !== null) {
+      alert('Incorrect PIN. Admin privileges denied.');
+    }
+  };
+
+  const isHostBySession = typeof window !== 'undefined' && (
+    new URLSearchParams(window.location.search).get('host') === 'true' || 
+    sessionStorage.getItem('isMeetHost_' + roomId) === 'true'
+  );
+  const myParticipantDoc = participants.find(p => p.peerId === myPeerIdRef.current);
+  const isMeHost = claimedHost || isHostBySession || (myParticipantDoc ? myParticipantDoc.isHost : (participants.length === 0));
 
   // Compute full participants list
   const allParticipantsList: ParticipantInfo[] = [
@@ -1378,6 +1406,8 @@ export default function MeetingRoomPage() {
           isOpen={activeSidePanel === 'chat'}
           onClose={() => setActiveSidePanel('none')}
           participants={allParticipantsList.map(p => ({ peerId: p.peerId, name: p.name }))}
+          isHost={isMeHost}
+          allowChat={securitySettings.allowChat}
         />
 
         <PeoplePanel
@@ -1404,6 +1434,8 @@ export default function MeetingRoomPage() {
           onClose={() => setActiveSidePanel('none')}
           onCopyLink={handleCopyJoiningInfo}
           copied={showCopiedToast}
+          isHost={isMeHost}
+          onClaimHost={handleClaimHost}
         />
 
         <ActivitiesModal

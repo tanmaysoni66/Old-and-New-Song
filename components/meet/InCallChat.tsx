@@ -50,6 +50,8 @@ interface InCallChatProps {
   isOpen: boolean;
   onClose: () => void;
   participants?: { peerId: string; name: string }[];
+  isHost?: boolean;
+  allowChat?: boolean;
 }
 
 export default function InCallChat({ 
@@ -58,7 +60,9 @@ export default function InCallChat({
   myName, 
   isOpen, 
   onClose,
-  participants = []
+  participants = [],
+  isHost = false,
+  allowChat = true,
 }: InCallChatProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputText, setInputText] = useState('');
@@ -350,58 +354,65 @@ export default function InCallChat({
       )}
 
       {/* Input Area */}
-      <form onSubmit={(e) => handleSendMessage(e)} className="p-3 border-t border-slate-800 shrink-0 bg-slate-900">
-        <div className="relative flex items-center gap-1.5">
-          <button
-            type="button"
-            onClick={() => {
-              setShowAttachMenu(!showAttachMenu);
-              setShowEmojiPicker(false);
-            }}
-            className={`p-2 rounded-full transition-colors ${
-              showAttachMenu ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-800'
-            }`}
-            title="Attach File (Zoom file sharing)"
-          >
-            <Paperclip className="w-4 h-4" />
-          </button>
-
-          <button
-            type="button"
-            onClick={() => {
-              setShowEmojiPicker(!showEmojiPicker);
-              setShowAttachMenu(false);
-            }}
-            className={`p-2 rounded-full transition-colors ${
-              showEmojiPicker ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-800'
-            }`}
-            title="Insert Emoji"
-          >
-            <Smile className="w-4 h-4" />
-          </button>
-
-          <input
-            type="text"
-            placeholder={
-              targetRecipient === 'everyone'
-                ? "Send a message to everyone..."
-                : `Private message to ${participants.find(p => p.peerId === targetRecipient)?.name || 'attendee'}...`
-            }
-            value={inputText}
-            onChange={(e) => setInputText(e.target.value)}
-            className="flex-1 pl-3 pr-10 py-2.5 rounded-full bg-slate-800 text-xs text-white placeholder-slate-400 border border-slate-700 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all"
-          />
-
-          <button
-            type="submit"
-            disabled={!inputText.trim()}
-            className="p-2.5 rounded-full bg-indigo-600 hover:bg-indigo-500 text-white disabled:opacity-30 transition-colors shrink-0"
-            title="Send"
-          >
-            <Send className="w-4 h-4" />
-          </button>
+      {!allowChat && !isHost ? (
+        <div className="p-4 border-t border-slate-800 bg-slate-900/90 text-center text-xs text-amber-400 font-medium flex items-center justify-center gap-2">
+          <Lock className="w-4 h-4 text-amber-400 shrink-0" />
+          <span>In-call chat is temporarily disabled by the host.</span>
         </div>
-      </form>
+      ) : (
+        <form onSubmit={(e) => handleSendMessage(e)} className="p-3 border-t border-slate-800 shrink-0 bg-slate-900">
+          <div className="relative flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => {
+                setShowAttachMenu(!showAttachMenu);
+                setShowEmojiPicker(false);
+              }}
+              className={`p-2 rounded-full transition-colors ${
+                showAttachMenu ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-800'
+              }`}
+              title="Attach File (Zoom file sharing)"
+            >
+              <Paperclip className="w-4 h-4" />
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setShowEmojiPicker(!showEmojiPicker);
+                setShowAttachMenu(false);
+              }}
+              className={`p-2 rounded-full transition-colors ${
+                showEmojiPicker ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-800'
+              }`}
+              title="Insert Emoji"
+            >
+              <Smile className="w-4 h-4" />
+            </button>
+
+            <input
+              type="text"
+              placeholder={
+                targetRecipient === 'everyone'
+                  ? "Send a message to everyone..."
+                  : `Private message to ${participants.find(p => p.peerId === targetRecipient)?.name || 'attendee'}...`
+              }
+              value={inputText}
+              onChange={(e) => setInputText(e.target.value)}
+              className="flex-1 pl-3 pr-10 py-2.5 rounded-full bg-slate-800 text-xs text-white placeholder-slate-400 border border-slate-700 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all"
+            />
+
+            <button
+              type="submit"
+              disabled={!inputText.trim()}
+              className="p-2.5 rounded-full bg-indigo-600 hover:bg-indigo-500 text-white disabled:opacity-30 transition-colors shrink-0"
+              title="Send"
+            >
+              <Send className="w-4 h-4" />
+            </button>
+          </div>
+        </form>
+      )}
 
     </div>
   );

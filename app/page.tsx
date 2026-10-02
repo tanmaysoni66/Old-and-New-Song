@@ -46,7 +46,10 @@ export default function MeetHomePage() {
 
   const handleStartInstantMeeting = () => {
     const code = generateMeetingCode();
-    router.push(`/meet/${code}`);
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem('isMeetHost_' + code, 'true');
+    }
+    router.push(`/meet/${code}?host=true`);
   };
 
   const handleCreateMeetingForLater = () => {
