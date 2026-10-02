@@ -18,14 +18,18 @@ import {
   PenTool, 
   Disc, 
   Maximize, 
-  Minimize, 
-  Sparkles,
-  Settings,
-  Circle
+  Sparkles, 
+  Settings, 
+  Circle,
+  ShieldCheck,
+  Grid,
+  FileSpreadsheet,
+  PictureInPicture2
 } from 'lucide-react';
 
 interface ControlBarProps {
   roomId: string;
+  isHost: boolean;
   micMuted: boolean;
   videoOff: boolean;
   handRaised: boolean;
@@ -33,7 +37,7 @@ interface ControlBarProps {
   captionsActive: boolean;
   isRecording: boolean;
   participantCount: number;
-  activeSidePanel: 'none' | 'info' | 'people' | 'chat';
+  activeSidePanel: 'none' | 'info' | 'people' | 'chat' | 'activities';
   onToggleMic: () => void;
   onToggleVideo: () => void;
   onToggleHand: () => void;
@@ -42,7 +46,12 @@ interface ControlBarProps {
   onToggleRecording: () => void;
   onSendReaction: (emoji: string) => void;
   onOpenWhiteboard: () => void;
-  onTogglePanel: (panel: 'info' | 'people' | 'chat') => void;
+  onOpenBackgrounds: () => void;
+  onOpenLayoutModal: () => void;
+  onOpenHostControls: () => void;
+  onOpenAttendance: () => void;
+  onTogglePiP: () => void;
+  onTogglePanel: (panel: 'info' | 'people' | 'chat' | 'activities') => void;
   onLeaveCall: () => void;
   onOpenSettings: () => void;
 }
@@ -51,6 +60,7 @@ const REACTIONS = ['💖', '👍', '👏', '😂', '😮', '🎉', '🔥', '🚀
 
 export default function ControlBar({
   roomId,
+  isHost,
   micMuted,
   videoOff,
   handRaised,
@@ -67,6 +77,11 @@ export default function ControlBar({
   onToggleRecording,
   onSendReaction,
   onOpenWhiteboard,
+  onOpenBackgrounds,
+  onOpenLayoutModal,
+  onOpenHostControls,
+  onOpenAttendance,
+  onTogglePiP,
   onTogglePanel,
   onLeaveCall,
   onOpenSettings,
@@ -218,7 +233,33 @@ export default function ControlBar({
           </button>
 
           {showMoreMenu && (
-            <div className="absolute bottom-14 right-0 w-60 bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl p-2 space-y-1 z-50 animate-in fade-in zoom-in-95 text-xs text-slate-200">
+            <div className="absolute bottom-14 right-0 w-64 bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl p-2 space-y-1 z-50 animate-in fade-in zoom-in-95 text-xs text-slate-200">
+              
+              {/* Visual effects */}
+              <button
+                onClick={() => {
+                  onOpenBackgrounds();
+                  setShowMoreMenu(false);
+                }}
+                className="w-full px-3 py-2 rounded-xl hover:bg-slate-800 flex items-center gap-2.5 text-left"
+              >
+                <Sparkles className="w-4 h-4 text-indigo-400" />
+                <span>Apply visual effects (Blur & Backgrounds)</span>
+              </button>
+
+              {/* Change layout */}
+              <button
+                onClick={() => {
+                  onOpenLayoutModal();
+                  setShowMoreMenu(false);
+                }}
+                className="w-full px-3 py-2 rounded-xl hover:bg-slate-800 flex items-center gap-2.5 text-left"
+              >
+                <Grid className="w-4 h-4 text-blue-400" />
+                <span>Change layout (Grid / Spotlight)</span>
+              </button>
+
+              {/* Whiteboard */}
               <button
                 onClick={() => {
                   onOpenWhiteboard();
@@ -226,10 +267,11 @@ export default function ControlBar({
                 }}
                 className="w-full px-3 py-2 rounded-xl hover:bg-slate-800 flex items-center gap-2.5 text-left"
               >
-                <PenTool className="w-4 h-4 text-indigo-400" />
+                <PenTool className="w-4 h-4 text-emerald-400" />
                 <span>Whiteboard (Open a Jam)</span>
               </button>
 
+              {/* Record meeting */}
               <button
                 onClick={() => {
                   onToggleRecording();
@@ -241,15 +283,54 @@ export default function ControlBar({
                 <span>{isRecording ? 'Stop recording' : 'Record meeting (MP4)'}</span>
               </button>
 
+              {/* Picture in picture */}
+              <button
+                onClick={() => {
+                  onTogglePiP();
+                  setShowMoreMenu(false);
+                }}
+                className="w-full px-3 py-2 rounded-xl hover:bg-slate-800 flex items-center gap-2.5 text-left"
+              >
+                <PictureInPicture2 className="w-4 h-4 text-amber-400" />
+                <span>Open Picture-in-Picture (PiP)</span>
+              </button>
+
+              {/* Attendance Sheet */}
+              <button
+                onClick={() => {
+                  onOpenAttendance();
+                  setShowMoreMenu(false);
+                }}
+                className="w-full px-3 py-2 rounded-xl hover:bg-slate-800 flex items-center gap-2.5 text-left"
+              >
+                <FileSpreadsheet className="w-4 h-4 text-teal-400" />
+                <span>Download Attendance Report (CSV)</span>
+              </button>
+
+              {/* Host controls */}
+              {isHost && (
+                <button
+                  onClick={() => {
+                    onOpenHostControls();
+                    setShowMoreMenu(false);
+                  }}
+                  className="w-full px-3 py-2 rounded-xl hover:bg-slate-800 flex items-center gap-2.5 text-left"
+                >
+                  <ShieldCheck className="w-4 h-4 text-rose-400" />
+                  <span>Host controls (Safety & Locks)</span>
+                </button>
+              )}
+
+              {/* Settings */}
               <button
                 onClick={() => {
                   onOpenSettings();
                   setShowMoreMenu(false);
                 }}
-                className="w-full px-3 py-2 rounded-xl hover:bg-slate-800 flex items-center gap-2.5 text-left"
+                className="w-full px-3 py-2 rounded-xl hover:bg-slate-800 flex items-center gap-2.5 text-left border-t border-slate-800 mt-1 pt-2"
               >
                 <Settings className="w-4 h-4 text-slate-400" />
-                <span>Settings (Audio/Video)</span>
+                <span>Settings</span>
               </button>
             </div>
           )}
@@ -267,7 +348,7 @@ export default function ControlBar({
 
       </div>
 
-      {/* Right Controls: Details, People, Chat */}
+      {/* Right Controls: Details, People, Chat, Activities, Host */}
       <div className="flex items-center gap-1 sm:gap-2">
         
         {/* Info */}
@@ -311,6 +392,34 @@ export default function ControlBar({
         >
           <MessageSquare className="w-5 h-5" />
         </button>
+
+        {/* Google Meet Activities Icon (Triangle, Square, Circle) */}
+        <button
+          onClick={() => onTogglePanel('activities')}
+          className={`p-2.5 rounded-full transition-colors ${
+            activeSidePanel === 'activities'
+              ? 'bg-blue-600 text-white'
+              : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+          }`}
+          title="Activities (Polls, Q&A, Breakout)"
+        >
+          <div className="flex items-center gap-0.5">
+            <span className="w-2 h-2 rounded-full bg-blue-400" />
+            <span className="w-2 h-2 bg-yellow-400" />
+            <span className="w-0 h-0 border-l-[4px] border-l-transparent border-r-[4px] border-r-transparent border-b-[7px] border-b-rose-400" />
+          </div>
+        </button>
+
+        {/* Host Controls quick shield button (if Host) */}
+        {isHost && (
+          <button
+            onClick={onOpenHostControls}
+            className="p-2.5 rounded-full text-slate-400 hover:bg-slate-800 hover:text-white transition-colors"
+            title="Host controls"
+          >
+            <ShieldCheck className="w-5 h-5 text-blue-400" />
+          </button>
+        )}
 
       </div>
 

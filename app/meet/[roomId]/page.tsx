@@ -29,8 +29,7 @@ import {
   deleteDoc, 
   onSnapshot, 
   collection, 
-  addDoc,
-  serverTimestamp
+  addDoc 
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { WebRTCMeetingManager } from '@/lib/webrtc';
@@ -41,6 +40,11 @@ import InCallChat from '@/components/meet/InCallChat';
 import PeoplePanel, { ParticipantInfo } from '@/components/meet/PeoplePanel';
 import MeetingInfoPanel from '@/components/meet/MeetingInfoPanel';
 import WhiteboardModal from '@/components/meet/WhiteboardModal';
+import ActivitiesModal from '@/components/meet/ActivitiesModal';
+import HostControlsModal, { HostPermissions } from '@/components/meet/HostControlsModal';
+import LayoutSelectorModal, { MeetLayoutMode } from '@/components/meet/LayoutSelectorModal';
+import BackgroundsModal from '@/components/meet/BackgroundsModal';
+import AttendanceModal from '@/components/meet/AttendanceModal';
 
 interface FloatingReaction {
   id: string;
@@ -68,11 +72,30 @@ export default function MeetingRoomPage() {
   const [filterEffect, setFilterEffect] = useState('none');
   const [audioLevel, setAudioLevel] = useState(0);
 
-  // Active side panel: none | info | people | chat
-  const [activeSidePanel, setActiveSidePanel] = useState<'none' | 'info' | 'people' | 'chat'>('none');
+  // Active side panel: none | info | people | chat | activities
+  const [activeSidePanel, setActiveSidePanel] = useState<'none' | 'info' | 'people' | 'chat' | 'activities'>('none');
   const [whiteboardOpen, setWhiteboardOpen] = useState(false);
   const [showCopiedToast, setShowCopiedToast] = useState(false);
   const [pinnedPeerId, setPinnedPeerId] = useState<string | null>(null);
+
+  // Advanced Google Meet Flagship Modals State
+  const [hostControlsOpen, setHostControlsOpen] = useState(false);
+  const [layoutModalOpen, setLayoutModalOpen] = useState(false);
+  const [backgroundsModalOpen, setBackgroundsModalOpen] = useState(false);
+  const [attendanceModalOpen, setAttendanceModalOpen] = useState(false);
+
+  // Layout mode & tiles
+  const [layoutMode, setLayoutMode] = useState<MeetLayoutMode>('auto');
+  const [maxTiles, setMaxTiles] = useState(6);
+
+  // Host Permissions
+  const [hostPermissions, setHostPermissions] = useState<HostPermissions>({
+    allowScreenShare: true,
+    allowChat: true,
+    allowMic: true,
+    allowVideo: true,
+    lockMeeting: false,
+  });
 
   // Streams & WebRTC
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
@@ -290,7 +313,6 @@ export default function MeetingRoomPage() {
         track.enabled = !nextMuted;
       });
     }
-    // Update participant doc in Firestore
     if (hasJoined && myPeerIdRef.current) {
       const myDocRef = doc(db, 'meet_rooms', roomId, 'participants', myPeerIdRef.current);
       setDoc(myDocRef, { micMuted: nextMuted }, { merge: true }).catch(() => {});
@@ -306,7 +328,6 @@ export default function MeetingRoomPage() {
         track.enabled = !nextVideoOff;
       });
     }
-    // Update participant doc in Firestore
     if (hasJoined && myPeerIdRef.current) {
       const myDocRef = doc(db, 'meet_rooms', roomId, 'participants', myPeerIdRef.current);
       setDoc(myDocRef, { videoOff: nextVideoOff }, { merge: true }).catch(() => {});
@@ -352,12 +373,42 @@ export default function MeetingRoomPage() {
     }
   };
 
+  // Picture in Picture (PiP)
+  const handleTogglePiP = async () => {
+    try {
+      const videos = document.querySelectorAll('video');
+      const targetVideo = videos[0];
+      if (targetVideo && document.pictureInPictureEnabled) {
+        if (document.pictureInPictureElement) {
+          await document.exitPictureInPicture();
+        } else {
+          await targetVideo.requestPictureInPicture();
+        }
+      } else {
+        alert('Picture-in-Picture is not supported in this browser.');
+      }
+    } catch (e) {
+      console.warn('PiP error:', e);
+    }
+  };
+
+  // Mute All Participants
+  const handleMuteAll = () => {
+    participants.forEach((p) => {
+      if (p.peerId !== myPeerIdRef.current) {
+        const docRef = doc(db, 'meet_rooms', roomId, 'participants', p.peerId);
+        setDoc(docRef, { micMuted: true }, { merge: true }).catch(() => {});
+      }
+    });
+    alert('All participants have been muted by the host.');
+  };
+
   // Floating Reactions
   const handleSendReaction = (emoji: string) => {
     const reaction: FloatingReaction = {
       id: Math.random().toString(),
       emoji,
-      left: Math.floor(Math.random() * 60) + 20, // 20% to 80% left position
+      left: Math.floor(Math.random() * 60) + 20,
     };
     setFloatingReactions(prev => [...prev, reaction]);
     setTimeout(() => {
@@ -368,7 +419,6 @@ export default function MeetingRoomPage() {
   // Meeting Screen Recording (MediaRecorder)
   const handleToggleRecording = async () => {
     if (isRecording) {
-      // Stop recording and download MP4
       if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
         mediaRecorderRef.current.stop();
       }
@@ -410,7 +460,7 @@ export default function MeetingRoomPage() {
     setTimeout(() => setShowCopiedToast(false), 2500);
   };
 
-  // Spawn Simulated Colleague Peer for realistic testing
+  // Spawn Simulated Colleague Peer
   const handleAddTestPeer = async () => {
     const peerId = 'peer_colleague_' + Math.random().toString(36).substring(2, 6);
     const names = [
@@ -431,7 +481,6 @@ export default function MeetingRoomPage() {
       joinedAt: Date.now(),
     });
 
-    // Also send in-call welcome message
     const chatRef = collection(db, 'meet_rooms', roomId, 'messages');
     await addDoc(chatRef, {
       senderName: randomName,
@@ -441,8 +490,29 @@ export default function MeetingRoomPage() {
     });
   };
 
+  // All participants including "Me"
+  const isMeHost = participants.length === 0 || participants.find(p => p.peerId === myPeerIdRef.current)?.isHost === true;
+
+  const allParticipantsList: ParticipantInfo[] = [
+    {
+      peerId: myPeerIdRef.current,
+      name: displayName,
+      isHost: isMeHost,
+      micMuted,
+      videoOff,
+      handRaised,
+      isMe: true,
+    },
+    ...participants.filter(p => p.peerId !== myPeerIdRef.current)
+  ];
+
+  // Pinned or spotlight participant
+  const spotlightParticipant = pinnedPeerId 
+    ? allParticipantsList.find(p => p.peerId === pinnedPeerId) || allParticipantsList[0]
+    : allParticipantsList[0];
+
   // =========================================================================
-  // VIEW 1: PRE-CALL LOBBY / GREEN ROOM (तैयार हैं?)
+  // VIEW 1: PRE-CALL LOBBY / GREEN ROOM
   // =========================================================================
   if (!hasJoined) {
     return (
@@ -543,26 +613,12 @@ export default function MeetingRoomPage() {
                 <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
                 Visual Effects:
               </span>
-              <div className="flex items-center gap-1.5">
-                {[
-                  { label: 'None', filter: 'none' },
-                  { label: 'Blur', filter: 'blur(3px)' },
-                  { label: 'Studio', filter: 'contrast(1.15) brightness(1.05)' },
-                  { label: 'Warm', filter: 'sepia(0.2) contrast(1.1)' },
-                ].map((ef) => (
-                  <button
-                    key={ef.label}
-                    onClick={() => setFilterEffect(ef.filter)}
-                    className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-colors ${
-                      filterEffect === ef.filter
-                        ? 'bg-indigo-600 text-white'
-                        : 'bg-slate-900 hover:bg-slate-800 text-slate-300'
-                    }`}
-                  >
-                    {ef.label}
-                  </button>
-                ))}
-              </div>
+              <button
+                onClick={() => setBackgroundsModalOpen(true)}
+                className="px-3 py-1 rounded-lg bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 text-[11px] font-semibold hover:bg-indigo-600/50"
+              >
+                Choose Background
+              </button>
             </div>
 
           </div>
@@ -632,29 +688,22 @@ export default function MeetingRoomPage() {
 
         </main>
 
+        <BackgroundsModal
+          isOpen={backgroundsModalOpen}
+          onClose={() => setBackgroundsModalOpen(false)}
+          currentFilter={filterEffect}
+          onSelectFilter={(f) => setFilterEffect(f)}
+        />
+
       </div>
     );
   }
 
   // =========================================================================
-  // VIEW 2: IN-CALL GOOGLE MEET INTERFACE (मुख्य लाइव वीडियो कॉल)
+  // VIEW 2: IN-CALL GOOGLE MEET INTERFACE
   // =========================================================================
 
-  // All participants including "Me"
-  const allParticipantsList: ParticipantInfo[] = [
-    {
-      peerId: myPeerIdRef.current,
-      name: displayName,
-      isHost: participants.length === 0 || participants.find(p => p.peerId === myPeerIdRef.current)?.isHost,
-      micMuted,
-      videoOff,
-      handRaised,
-      isMe: true,
-    },
-    ...participants.filter(p => p.peerId !== myPeerIdRef.current)
-  ];
-
-  const totalTiles = allParticipantsList.length;
+  const visibleParticipants = allParticipantsList.slice(0, maxTiles);
 
   return (
     <div className="fixed inset-0 bg-slate-950 text-white flex flex-col font-sans select-none overflow-hidden">
@@ -692,41 +741,98 @@ export default function MeetingRoomPage() {
               <span className="font-mono text-slate-400 font-semibold">{roomId}</span>
               <span className="text-slate-600">•</span>
               <span className="text-slate-400">{allParticipantsList.length} in call</span>
+              {layoutMode !== 'auto' && (
+                <span className="px-2 py-0.5 rounded-full bg-slate-800 text-[10px] text-blue-400 capitalize">
+                  Layout: {layoutMode}
+                </span>
+              )}
             </div>
 
-            {/* Quick Test Peer Button (Simulate Multi-Person Call for Instant Testing) */}
-            <button
-              onClick={handleAddTestPeer}
-              className="px-2.5 py-1 rounded-full bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-800 text-[11px] font-semibold flex items-center gap-1.5 transition-colors"
-              title="Add a colleague simulation into this call to test multi-person grid"
-            >
-              <Plus className="w-3.5 h-3.5 text-indigo-400" />
-              <span>+ टेस्ट प्रतिभागी जोड़ें (Test Peer)</span>
-            </button>
+            {/* Quick Test Peer Button */}
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleAddTestPeer}
+                className="px-2.5 py-1 rounded-full bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-800 text-[11px] font-semibold flex items-center gap-1.5 transition-colors"
+                title="Add a colleague simulation into this call to test multi-person grid"
+              >
+                <Plus className="w-3.5 h-3.5 text-indigo-400" />
+                <span>+ टेस्ट प्रतिभागी जोड़ें (Test Peer)</span>
+              </button>
+            </div>
           </div>
 
-          {/* SCREEN SHARING SPOTLIGHT MODE */}
-          {isSharingScreen && screenStream ? (
+          {/* SCREEN SHARING OR SPOTLIGHT MODE */}
+          {(isSharingScreen && screenStream) || layoutMode === 'spotlight' ? (
             <div className="flex-1 flex flex-col lg:flex-row gap-3 overflow-hidden">
-              {/* Main Big Presentation Stage */}
+              {/* Spotlight Center */}
               <div className="flex-1 rounded-2xl bg-black border border-slate-800 overflow-hidden relative flex items-center justify-center">
-                <video
-                  ref={(ref) => {
-                    if (ref) ref.srcObject = screenStream;
-                  }}
-                  autoPlay
-                  playsInline
-                  className="w-full h-full object-contain"
-                />
-                <div className="absolute top-3 left-3 px-3 py-1.5 rounded-full bg-black/70 backdrop-blur-md text-white text-xs font-semibold flex items-center gap-2">
-                  <MonitorUp className="w-3.5 h-3.5 text-blue-400" />
-                  <span>You are presenting to everyone</span>
-                </div>
+                {isSharingScreen && screenStream ? (
+                  <>
+                    <video
+                      ref={(ref) => {
+                        if (ref) ref.srcObject = screenStream;
+                      }}
+                      autoPlay
+                      playsInline
+                      className="w-full h-full object-contain"
+                    />
+                    <div className="absolute top-3 left-3 px-3 py-1.5 rounded-full bg-black/70 backdrop-blur-md text-white text-xs font-semibold flex items-center gap-2">
+                      <MonitorUp className="w-3.5 h-3.5 text-blue-400" />
+                      <span>You are presenting to everyone</span>
+                    </div>
+                  </>
+                ) : (
+                  <VideoTile
+                    stream={spotlightParticipant.isMe ? localStream : (remoteStreams[spotlightParticipant.peerId] || null)}
+                    name={spotlightParticipant.name}
+                    isMe={spotlightParticipant.isMe}
+                    micMuted={spotlightParticipant.micMuted}
+                    videoOff={spotlightParticipant.videoOff}
+                    handRaised={spotlightParticipant.handRaised}
+                    isSpeaking={spotlightParticipant.isMe ? isSpeakingMe : false}
+                    isPinned={true}
+                    onTogglePin={() => setPinnedPeerId(null)}
+                  />
+                )}
               </div>
 
               {/* Sidebar Video Tiles */}
               <div className="w-full lg:w-64 h-32 lg:h-full overflow-x-auto lg:overflow-y-auto flex lg:flex-col gap-3 shrink-0">
                 {allParticipantsList.map((p) => {
+                  const stream = p.isMe ? localStream : (remoteStreams[p.peerId] || null);
+                  return (
+                    <div key={p.peerId} className="w-48 lg:w-full h-full lg:h-40 shrink-0">
+                      <VideoTile
+                        stream={stream}
+                        name={p.name}
+                        isMe={p.isMe}
+                        micMuted={p.micMuted}
+                        videoOff={p.videoOff}
+                        handRaised={p.handRaised}
+                        isSpeaking={p.isMe ? isSpeakingMe : false}
+                        onTogglePin={() => setPinnedPeerId(p.peerId)}
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ) : layoutMode === 'sidebar' && allParticipantsList.length > 1 ? (
+            /* SIDEBAR LAYOUT */
+            <div className="flex-1 flex flex-col lg:flex-row gap-3 overflow-hidden">
+              <div className="flex-1 rounded-2xl overflow-hidden">
+                <VideoTile
+                  stream={allParticipantsList[0].isMe ? localStream : (remoteStreams[allParticipantsList[0].peerId] || null)}
+                  name={allParticipantsList[0].name}
+                  isMe={allParticipantsList[0].isMe}
+                  micMuted={allParticipantsList[0].micMuted}
+                  videoOff={allParticipantsList[0].videoOff}
+                  handRaised={allParticipantsList[0].handRaised}
+                  isSpeaking={allParticipantsList[0].isMe ? isSpeakingMe : false}
+                />
+              </div>
+              <div className="w-full lg:w-64 h-32 lg:h-full overflow-x-auto lg:overflow-y-auto flex lg:flex-col gap-3 shrink-0">
+                {allParticipantsList.slice(1).map((p) => {
                   const stream = p.isMe ? localStream : (remoteStreams[p.peerId] || null);
                   return (
                     <div key={p.peerId} className="w-48 lg:w-full h-full lg:h-40 shrink-0">
@@ -745,20 +851,20 @@ export default function MeetingRoomPage() {
               </div>
             </div>
           ) : (
-            /* ADAPTIVE VIDEO GRID (Google Meet Dynamic Grid) */
+            /* TILED / AUTO GRID */
             <div className="flex-1 w-full h-full overflow-hidden flex items-center justify-center">
               <div 
                 className={`w-full h-full max-h-[82vh] grid gap-3 sm:gap-4 transition-all duration-300 ${
-                  totalTiles === 1
+                  visibleParticipants.length === 1
                     ? 'grid-cols-1 max-w-4xl'
-                    : totalTiles === 2
+                    : visibleParticipants.length === 2
                     ? 'grid-cols-1 sm:grid-cols-2 max-w-5xl'
-                    : totalTiles <= 4
+                    : visibleParticipants.length <= 4
                     ? 'grid-cols-2 max-w-5xl'
                     : 'grid-cols-2 lg:grid-cols-3 max-w-6xl'
                 }`}
               >
-                {allParticipantsList.map((p) => {
+                {visibleParticipants.map((p) => {
                   const stream = p.isMe ? localStream : (remoteStreams[p.peerId] || null);
                   return (
                     <VideoTile
@@ -771,6 +877,7 @@ export default function MeetingRoomPage() {
                       handRaised={p.handRaised}
                       isSpeaking={p.isMe ? isSpeakingMe : false}
                       filterEffect={p.isMe ? filterEffect : 'none'}
+                      onTogglePin={() => setPinnedPeerId(p.peerId)}
                     />
                   );
                 })}
@@ -790,7 +897,7 @@ export default function MeetingRoomPage() {
 
         </div>
 
-        {/* Side Panels: Chat | People | Info */}
+        {/* Side Panels: Chat | People | Info | Activities */}
         <InCallChat
           roomId={roomId}
           myPeerId={myPeerIdRef.current}
@@ -805,6 +912,7 @@ export default function MeetingRoomPage() {
           isOpen={activeSidePanel === 'people'}
           onClose={() => setActiveSidePanel('none')}
           onCopyLink={handleCopyJoiningInfo}
+          onMuteAll={handleMuteAll}
         />
 
         <MeetingInfoPanel
@@ -815,11 +923,21 @@ export default function MeetingRoomPage() {
           copied={showCopiedToast}
         />
 
+        <ActivitiesModal
+          roomId={roomId}
+          myPeerId={myPeerIdRef.current}
+          myName={displayName}
+          isHost={isMeHost}
+          isOpen={activeSidePanel === 'activities'}
+          onClose={() => setActiveSidePanel('none')}
+        />
+
       </div>
 
       {/* Bottom Floating Control Dock */}
       <ControlBar
         roomId={roomId}
+        isHost={isMeHost}
         micMuted={micMuted}
         videoOff={videoOff}
         handRaised={handRaised}
@@ -836,6 +954,11 @@ export default function MeetingRoomPage() {
         onToggleRecording={handleToggleRecording}
         onSendReaction={handleSendReaction}
         onOpenWhiteboard={() => setWhiteboardOpen(true)}
+        onOpenBackgrounds={() => setBackgroundsModalOpen(true)}
+        onOpenLayoutModal={() => setLayoutModalOpen(true)}
+        onOpenHostControls={() => setHostControlsOpen(true)}
+        onOpenAttendance={() => setAttendanceModalOpen(true)}
+        onTogglePiP={handleTogglePiP}
         onTogglePanel={(p) => setActiveSidePanel(prev => prev === p ? 'none' : p)}
         onLeaveCall={handleLeaveCall}
         onOpenSettings={() => setActiveSidePanel('info')}
@@ -846,6 +969,41 @@ export default function MeetingRoomPage() {
         roomId={roomId}
         isOpen={whiteboardOpen}
         onClose={() => setWhiteboardOpen(false)}
+      />
+
+      {/* Host Controls Modal */}
+      <HostControlsModal
+        isOpen={hostControlsOpen}
+        onClose={() => setHostControlsOpen(false)}
+        permissions={hostPermissions}
+        onChangePermissions={(p) => setHostPermissions(p)}
+        onMuteAll={handleMuteAll}
+      />
+
+      {/* Change Layout Modal */}
+      <LayoutSelectorModal
+        isOpen={layoutModalOpen}
+        onClose={() => setLayoutModalOpen(false)}
+        layoutMode={layoutMode}
+        maxTiles={maxTiles}
+        onChangeLayout={(mode) => setLayoutMode(mode)}
+        onChangeMaxTiles={(tiles) => setMaxTiles(tiles)}
+      />
+
+      {/* Backgrounds & Visual Effects Modal */}
+      <BackgroundsModal
+        isOpen={backgroundsModalOpen}
+        onClose={() => setBackgroundsModalOpen(false)}
+        currentFilter={filterEffect}
+        onSelectFilter={(f) => setFilterEffect(f)}
+      />
+
+      {/* Attendance Report Modal */}
+      <AttendanceModal
+        roomId={roomId}
+        isOpen={attendanceModalOpen}
+        onClose={() => setAttendanceModalOpen(false)}
+        participants={allParticipantsList}
       />
 
     </div>

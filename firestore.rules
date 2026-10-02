@@ -151,6 +151,18 @@ service cloud.firestore {
       match /whiteboard/{strokeId} {
         allow read, write: if isValidId(strokeId);
       }
+
+      match /polls/{pollId} {
+        allow read, write: if isValidId(pollId);
+      }
+
+      match /questions/{questionId} {
+        allow read, write: if isValidId(questionId);
+      }
+
+      match /settings/{settingId} {
+        allow read, write: if isValidId(settingId);
+      }
     }
   }
 }
