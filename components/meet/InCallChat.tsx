@@ -76,25 +76,31 @@ export default function InCallChat({
     const chatRef = collection(db, 'meet_rooms', roomId, 'messages');
     const q = query(chatRef, orderBy('createdAt', 'asc'));
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const list: ChatMessage[] = [];
-      snapshot.forEach((doc) => {
-        list.push({ id: doc.id, ...doc.data() } as ChatMessage);
-      });
-      setMessages(list);
+    const unsubscribe = onSnapshot(
+      q,
+      (snapshot) => {
+        const list: ChatMessage[] = [];
+        snapshot.forEach((doc) => {
+          list.push({ id: doc.id, ...doc.data() } as ChatMessage);
+        });
+        setMessages(list);
 
-      // Play sound if new message from others
-      if (!initialLoadRef.current) {
-        const lastMsg = list[list.length - 1];
-        if (lastMsg && lastMsg.senderPeerId !== myPeerId) {
-          // Only play if message is for everyone or specifically for me
-          if (!lastMsg.recipientPeerId || lastMsg.recipientPeerId === 'everyone' || lastMsg.recipientPeerId === myPeerId) {
-            soundManager.playMessageSound();
+        // Play sound if new message from others
+        if (!initialLoadRef.current) {
+          const lastMsg = list[list.length - 1];
+          if (lastMsg && lastMsg.senderPeerId !== myPeerId) {
+            // Only play if message is for everyone or specifically for me
+            if (!lastMsg.recipientPeerId || lastMsg.recipientPeerId === 'everyone' || lastMsg.recipientPeerId === myPeerId) {
+              soundManager.playMessageSound();
+            }
           }
         }
+        initialLoadRef.current = false;
+      },
+      (err) => {
+        console.warn('In-call chat listener notice:', err);
       }
-      initialLoadRef.current = false;
-    });
+    );
 
     return () => unsubscribe();
   }, [roomId, myPeerId]);

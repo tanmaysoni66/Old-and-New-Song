@@ -114,16 +114,22 @@ export class WebRTCMeetingManager {
     const signalsRef = collection(db, 'meet_rooms', this.roomId, 'signals');
     const q = query(signalsRef, where('to', '==', this.myPeerId));
 
-    this.unsubscribeSignals = onSnapshot(q, (snapshot) => {
-      snapshot.docChanges().forEach(async (change) => {
-        if (change.type === 'added') {
-          const signal = change.doc.data() as SignalData;
-          await this.handleIncomingSignal(signal);
-          // Delete signal after consumption to keep database clean
-          deleteDoc(change.doc.ref).catch(() => {});
-        }
-      });
-    });
+    this.unsubscribeSignals = onSnapshot(
+      q,
+      (snapshot) => {
+        snapshot.docChanges().forEach(async (change) => {
+          if (change.type === 'added') {
+            const signal = change.doc.data() as SignalData;
+            await this.handleIncomingSignal(signal);
+            // Delete signal after consumption to keep database clean
+            deleteDoc(change.doc.ref).catch(() => {});
+          }
+        });
+      },
+      (err) => {
+        console.warn('WebRTC signals listener notice:', err);
+      }
+    );
   }
 
   private async handleIncomingSignal(signal: SignalData) {

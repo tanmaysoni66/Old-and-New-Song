@@ -54,15 +54,21 @@ export default function WhiteboardModal({ roomId, isOpen, onClose }: WhiteboardM
     if (!isOpen || !roomId) return;
 
     const boardRef = collection(db, 'meet_rooms', roomId, 'whiteboard');
-    const unsubscribe = onSnapshot(boardRef, (snapshot) => {
-      const strokes: WhiteboardStroke[] = [];
-      snapshot.forEach((doc) => {
-        strokes.push({ id: doc.id, ...doc.data() } as WhiteboardStroke);
-      });
-      strokes.sort((a, b) => a.createdAt - b.createdAt);
-      strokesRef.current = strokes;
-      redrawCanvas();
-    });
+    const unsubscribe = onSnapshot(
+      boardRef,
+      (snapshot) => {
+        const strokes: WhiteboardStroke[] = [];
+        snapshot.forEach((doc) => {
+          strokes.push({ id: doc.id, ...doc.data() } as WhiteboardStroke);
+        });
+        strokes.sort((a, b) => a.createdAt - b.createdAt);
+        strokesRef.current = strokes;
+        redrawCanvas();
+      },
+      (err) => {
+        console.warn('Whiteboard listener notice:', err);
+      }
+    );
 
     return () => unsubscribe();
   }, [isOpen, roomId]);

@@ -96,25 +96,37 @@ export default function ActivitiesModal({
 
     // Polls Listener
     const pollsRef = collection(db, 'meet_rooms', roomId, 'polls');
-    const unsubPolls = onSnapshot(pollsRef, (snapshot) => {
-      const list: MeetPoll[] = [];
-      snapshot.forEach((d) => {
-        list.push({ id: d.id, ...d.data() } as MeetPoll);
-      });
-      list.sort((a, b) => b.createdAt - a.createdAt);
-      setPolls(list);
-    });
+    const unsubPolls = onSnapshot(
+      pollsRef,
+      (snapshot) => {
+        const list: MeetPoll[] = [];
+        snapshot.forEach((d) => {
+          list.push({ id: d.id, ...d.data() } as MeetPoll);
+        });
+        list.sort((a, b) => b.createdAt - a.createdAt);
+        setPolls(list);
+      },
+      (err) => {
+        console.warn('Activities polls listener notice:', err);
+      }
+    );
 
     // Q&A Listener
     const qaRef = collection(db, 'meet_rooms', roomId, 'questions');
-    const unsubQA = onSnapshot(qaRef, (snapshot) => {
-      const list: MeetQuestion[] = [];
-      snapshot.forEach((d) => {
-        list.push({ id: d.id, ...d.data() } as MeetQuestion);
-      });
-      list.sort((a, b) => b.upvotes - a.upvotes); // highest upvotes on top
-      setQuestions(list);
-    });
+    const unsubQA = onSnapshot(
+      qaRef,
+      (snapshot) => {
+        const list: MeetQuestion[] = [];
+        snapshot.forEach((d) => {
+          list.push({ id: d.id, ...d.data() } as MeetQuestion);
+        });
+        list.sort((a, b) => b.upvotes - a.upvotes); // highest upvotes on top
+        setQuestions(list);
+      },
+      (err) => {
+        console.warn('Activities Q&A listener notice:', err);
+      }
+    );
 
     return () => {
       unsubPolls();

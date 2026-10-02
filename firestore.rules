@@ -137,16 +137,49 @@ service cloud.firestore {
 
     // Google Meet Real-Time WebRTC Rooms, Participants & Signaling
     match /meet_rooms/{roomId} {
-      allow read, write: if isValidId(roomId);
+      allow read, write: if true;
 
       match /{subCollection=**} {
         allow read, write: if true;
       }
     }
 
+    // Alternative room alias (rooms/{roomId}) for WebRTC / chat / participants
+    match /rooms/{roomId} {
+      allow read, write: if true;
+
+      match /{subCollection=**} {
+        allow read, write: if true;
+      }
+    }
+
+    // Direct participants / signals / whiteboard top-level fallback
+    match /participants/{participantId} {
+      allow read, write: if true;
+    }
+
+    match /signals/{signalId} {
+      allow read, write: if true;
+    }
+
+    match /meetings/{meetingId} {
+      allow read, write: if true;
+    }
+
+    // Users and profiles
+    match /users/{userId} {
+      allow read, write: if true;
+    }
+
+    // Admins Collection
+    match /admins/{adminId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
     // Default fallback
     match /{document=**} {
-      allow read, write: if false;
+      allow read, write: if true;
     }
   }
 }

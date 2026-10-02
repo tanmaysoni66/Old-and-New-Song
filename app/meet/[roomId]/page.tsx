@@ -57,6 +57,8 @@ import AICompanionModal, { TranscriptItem } from '@/components/meet/AICompanionM
 import SecurityShieldModal, { SecuritySettings } from '@/components/meet/SecurityShieldModal';
 import MeetingAgendaTimer from '@/components/meet/MeetingAgendaTimer';
 import ScheduleMeetingModal from '@/components/meet/ScheduleMeetingModal';
+import DeviceSettingsModal from '@/components/meet/DeviceSettingsModal';
+import ScreenAnnotationBar from '@/components/meet/ScreenAnnotationBar';
 import { createSimulatedPeerStream } from '@/lib/mock-stream';
 
 interface FloatingReaction {
@@ -101,6 +103,11 @@ export default function MeetingRoomPage() {
   const [securityShieldOpen, setSecurityShieldOpen] = useState(false);
   const [agendaTimerOpen, setAgendaTimerOpen] = useState(false);
   const [scheduleModalOpen, setScheduleModalOpen] = useState(false);
+  const [deviceSettingsOpen, setDeviceSettingsOpen] = useState(false);
+  const [permissionState, setPermissionState] = useState<'prompt' | 'granted' | 'denied'>('prompt');
+  const [selectedMicId, setSelectedMicId] = useState<string>('default');
+  const [selectedCameraId, setSelectedCameraId] = useState<string>('default');
+  const [selectedSpeakerId, setSelectedSpeakerId] = useState<string>('default');
 
   // Spotlight for Everyone (Zoom & Google Meet Flagship)
   const [spotlightedPeerId, setSpotlightedPeerId] = useState<string | null>(null);
@@ -178,60 +185,115 @@ export default function MeetingRoomPage() {
   }, []);
 
   // Initialize Pre-call Lobby Camera & Mic stream
-  useEffect(() => {
-    let active = true;
-
-    async function setupLobbyMedia() {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { width: { ideal: 1280 }, height: { ideal: 720 } },
-          audio: true,
-        });
-
-        if (!active) return;
-        setLocalStream(stream);
-
-        // Setup Audio Analyser for live volume meter
-        try {
-          const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
-          if (AudioCtx) {
-            const ctx = new AudioCtx();
-            audioContextRef.current = ctx;
-            const analyser = ctx.createAnalyser();
-            analyser.fftSize = 256;
-            const source = ctx.createMediaStreamSource(stream);
-            source.connect(analyser);
-
-            const bufferLength = analyser.frequencyBinCount;
-            const dataArray = new Uint8Array(bufferLength);
-
-            const checkAudio = () => {
-              if (!active) return;
-              analyser.getByteFrequencyData(dataArray);
-              let sum = 0;
-              for (let i = 0; i < bufferLength; i++) {
-                sum += dataArray[i];
-              }
-              const average = sum / bufferLength;
-              setAudioLevel(Math.min(100, Math.round((average / 128) * 100)));
-              setIsSpeakingMe(average > 15);
-              requestAnimationFrame(checkAudio);
-            };
-            checkAudio();
-          }
-        } catch (e) {
-          console.warn('Audio analyser error', e);
+  // Setup Audio Analyser helper
+  const attachAudioAnalyser = (stream: MediaStream) => {
+    try {
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      if (AudioCtx && stream.getAudioTracks().length > 0) {
+        if (audioContextRef.current) {
+          audioContextRef.current.close().catch(() => {});
         }
+        const ctx = new AudioCtx();
+        audioContextRef.current = ctx;
+        const analyser = ctx.createAnalyser();
+        analyser.fftSize = 256;
+        const source = ctx.createMediaStreamSource(stream);
+        source.connect(analyser);
 
-      } catch (err) {
-        console.warn('Lobby camera/mic access denied, creating dummy stream', err);
+        const bufferLength = analyser.frequencyBinCount;
+        const dataArray = new Uint8Array(bufferLength);
+
+        const checkAudio = () => {
+          if (!audioContextRef.current) return;
+          analyser.getByteFrequencyData(dataArray);
+          let sum = 0;
+          for (let i = 0; i < bufferLength; i++) {
+            sum += dataArray[i];
+          }
+          const average = sum / bufferLength;
+          setAudioLevel(Math.min(100, Math.round((average / 128) * 100)));
+          setIsSpeakingMe(average > 15);
+          requestAnimationFrame(checkAudio);
+        };
+        checkAudio();
       }
+    } catch (e) {
+      console.warn('Audio analyser setup notice', e);
     }
+  };
 
-    setupLobbyMedia();
+  // Request / Switch Media Permissions and Streams
+  const requestMediaPermissions = async (videoDeviceId?: string, audioDeviceId?: string) => {
+    try {
+      const videoConstraints: MediaTrackConstraints = videoDeviceId && videoDeviceId !== 'default'
+        ? { deviceId: { exact: videoDeviceId } }
+        : { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } };
+
+      const audioConstraints: MediaTrackConstraints = audioDeviceId && audioDeviceId !== 'default'
+        ? { deviceId: { exact: audioDeviceId }, echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+        : { echoCancellation: true, noiseSuppression: true, autoGainControl: true };
+
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: videoConstraints,
+        audio: audioConstraints,
+      });
+
+      setLocalStream(stream);
+      setPermissionState('granted');
+      attachAudioAnalyser(stream);
+
+      // Replace tracks in active WebRTC peer connections
+      if (webrtcManagerRef.current) {
+        webrtcManagerRef.current.localStream = stream;
+        const videoTrack = stream.getVideoTracks()[0];
+        const audioTrack = stream.getAudioTracks()[0];
+        webrtcManagerRef.current.peerConnections.forEach((pc) => {
+          pc.getSenders().forEach((sender) => {
+            if (sender.track?.kind === 'video' && videoTrack) sender.replaceTrack(videoTrack);
+            if (sender.track?.kind === 'audio' && audioTrack) sender.replaceTrack(audioTrack);
+          });
+        });
+      }
+      return stream;
+    } catch (err: any) {
+      console.warn('getUserMedia notice:', err);
+      setPermissionState('denied');
+      return null;
+    }
+  };
+
+  // Handle switching audio input (microphone)
+  const handleSelectMic = async (deviceId: string) => {
+    setSelectedMicId(deviceId);
+    await requestMediaPermissions(selectedCameraId, deviceId);
+  };
+
+  // Handle switching video input (camera)
+  const handleSelectCamera = async (deviceId: string) => {
+    setSelectedCameraId(deviceId);
+    await requestMediaPermissions(deviceId, selectedMicId);
+  };
+
+  // Handle switching audio output (speakers)
+  const handleSelectSpeaker = async (deviceId: string) => {
+    setSelectedSpeakerId(deviceId);
+    try {
+      const audioElements = document.querySelectorAll('audio, video');
+      audioElements.forEach((el: any) => {
+        if (typeof el.setSinkId === 'function') {
+          el.setSinkId(deviceId).catch(console.warn);
+        }
+      });
+    } catch (err) {
+      console.warn('setSinkId error:', err);
+    }
+  };
+
+  // Initialize Pre-call Lobby Camera & Mic stream on mount
+  useEffect(() => {
+    requestMediaPermissions();
 
     return () => {
-      active = false;
       if (audioContextRef.current) {
         audioContextRef.current.close().catch(() => {});
       }
@@ -243,13 +305,19 @@ export default function MeetingRoomPage() {
     if (!roomId) return;
     const participantsRef = collection(db, 'meet_rooms', roomId, 'participants');
 
-    const unsubscribe = onSnapshot(participantsRef, (snapshot) => {
-      const list: ParticipantInfo[] = [];
-      snapshot.forEach((d) => {
-        list.push({ peerId: d.id, ...d.data() } as ParticipantInfo);
-      });
-      setParticipants(list);
-    });
+    const unsubscribe = onSnapshot(
+      participantsRef,
+      (snapshot) => {
+        const list: ParticipantInfo[] = [];
+        snapshot.forEach((d) => {
+          list.push({ peerId: d.id, ...d.data() } as ParticipantInfo);
+        });
+        setParticipants(list);
+      },
+      (error) => {
+        console.warn('Meeting room participants listener note:', error);
+      }
+    );
 
     return () => unsubscribe();
   }, [roomId]);
@@ -826,9 +894,32 @@ export default function MeetingRoomPage() {
         {/* Lobby Content */}
         <main className="flex-1 max-w-6xl mx-auto w-full p-4 sm:p-8 flex flex-col lg:flex-row items-center justify-center gap-8 lg:gap-16">
           
-          {/* Left: Camera Preview Window */}
+          {/* Left: Camera Preview Window & Permission Controls */}
           <div className="w-full max-w-xl space-y-4">
             
+            {/* Interactive Permission Request Card if not yet allowed */}
+            {permissionState !== 'granted' && (
+              <div className="p-4 rounded-2xl bg-blue-950/40 border border-blue-500/50 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs text-blue-100 shadow-xl animate-in fade-in">
+                <div className="flex items-start gap-2.5">
+                  <ShieldCheck className="w-5 h-5 text-blue-400 shrink-0 mt-0.5" />
+                  <div>
+                    <span className="font-bold block text-white text-sm">Camera & Mic Access (कैमरा व माइक एक्सेस)</span>
+                    <span className="text-slate-300 text-[11px]">
+                      Allow your camera and microphone so other attendees can see and hear you.
+                    </span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => requestMediaPermissions()}
+                  className="py-2 px-3.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs shrink-0 transition-all shadow-md shadow-blue-600/30 flex items-center gap-1.5"
+                >
+                  <Check className="w-4 h-4" />
+                  <span>Allow Access</span>
+                </button>
+              </div>
+            )}
+
             <div className="relative aspect-video rounded-3xl bg-slate-900 border border-slate-800 overflow-hidden shadow-2xl flex items-center justify-center">
               
               {/* Live Local Webcam Video */}
@@ -898,17 +989,24 @@ export default function MeetingRoomPage() {
 
             </div>
 
-            {/* Virtual Background Filter Effects */}
-            <div className="flex items-center justify-between px-2 text-xs text-slate-400">
-              <span className="flex items-center gap-1.5 font-medium">
-                <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
-                Virtual Effects & Studio Touch Up:
-              </span>
+            {/* Virtual Background & Device Settings Actions */}
+            <div className="flex flex-wrap items-center justify-between gap-2 px-1 text-xs text-slate-400">
               <button
-                onClick={() => setBackgroundsModalOpen(true)}
-                className="px-3 py-1 rounded-lg bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 text-[11px] font-semibold hover:bg-indigo-600/50"
+                type="button"
+                onClick={() => setDeviceSettingsOpen(true)}
+                className="px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 text-xs font-semibold flex items-center gap-1.5 border border-slate-800 transition-colors"
               >
-                Choose Background
+                <Settings className="w-3.5 h-3.5 text-blue-400" />
+                <span>Audio & Video Settings (उपकरण)</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setBackgroundsModalOpen(true)}
+                className="px-3 py-1.5 rounded-xl bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 text-xs font-semibold flex items-center gap-1.5 transition-colors"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
+                <span>Visual Effects</span>
               </button>
             </div>
 
@@ -1121,7 +1219,7 @@ export default function MeetingRoomPage() {
               {/* Spotlight Center */}
               <div className="flex-1 rounded-2xl bg-black border border-slate-800 overflow-hidden relative flex items-center justify-center">
                 {isSharingScreen && screenStream ? (
-                  <>
+                  <div className="relative w-full h-full flex items-center justify-center">
                     <video
                       ref={(ref) => {
                         if (ref) ref.srcObject = screenStream;
@@ -1130,11 +1228,14 @@ export default function MeetingRoomPage() {
                       playsInline
                       className="w-full h-full object-contain"
                     />
-                    <div className="absolute top-3 left-3 px-3 py-1.5 rounded-full bg-black/70 backdrop-blur-md text-white text-xs font-semibold flex items-center gap-2">
+                    <div className="absolute top-3 left-3 px-3 py-1.5 rounded-full bg-black/70 backdrop-blur-md text-white text-xs font-semibold flex items-center gap-2 z-20">
                       <MonitorUp className="w-3.5 h-3.5 text-blue-400" />
                       <span>You are presenting to everyone</span>
                     </div>
-                  </>
+
+                    {/* Live Screen Annotation & Laser Pointer Overlay */}
+                    <ScreenAnnotationBar isSharing={true} />
+                  </div>
                 ) : (
                   <VideoTile
                     stream={spotlightParticipant.isMe ? localStream : (remoteStreams[spotlightParticipant.peerId] || null)}
@@ -1347,7 +1448,22 @@ export default function MeetingRoomPage() {
         onTogglePiP={handleTogglePiP}
         onTogglePanel={(p) => setActiveSidePanel(prev => prev === p ? 'none' : p)}
         onLeaveCall={handleLeaveCall}
-        onOpenSettings={() => setActiveSidePanel('info')}
+        onOpenSettings={() => setDeviceSettingsOpen(true)}
+      />
+
+      {/* Audio & Video Device Settings Modal */}
+      <DeviceSettingsModal
+        isOpen={deviceSettingsOpen}
+        onClose={() => setDeviceSettingsOpen(false)}
+        localStream={localStream}
+        selectedMicId={selectedMicId}
+        selectedCameraId={selectedCameraId}
+        selectedSpeakerId={selectedSpeakerId}
+        onChangeMic={handleSelectMic}
+        onChangeCamera={handleSelectCamera}
+        onChangeSpeaker={handleSelectSpeaker}
+        onRequestPermissions={() => requestMediaPermissions()}
+        permissionState={permissionState}
       />
 
       {/* Realtime Collaborative Whiteboard (Jamboard) */}
