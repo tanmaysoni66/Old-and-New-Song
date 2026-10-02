@@ -13,15 +13,23 @@ import {
   Copy, 
   Check, 
   MonitorUp, 
-  GraduationCap, 
   ArrowLeft,
   Settings,
   HelpCircle,
   Subtitles,
   Volume2,
   Users,
-  ShieldCheck,
-  Plus
+  ShieldCheck, 
+  Plus,
+  DoorClosed,
+  Star,
+  Clock,
+  Bot,
+  AlertTriangle,
+  UserCheck,
+  UserX,
+  Lock,
+  Calendar
 } from 'lucide-react';
 import { 
   doc, 
@@ -37,7 +45,7 @@ import { soundManager } from '@/lib/audio-effects';
 import VideoTile from '@/components/meet/VideoTile';
 import ControlBar from '@/components/meet/ControlBar';
 import InCallChat from '@/components/meet/InCallChat';
-import PeoplePanel, { ParticipantInfo } from '@/components/meet/PeoplePanel';
+import PeoplePanel, { ParticipantInfo, WaitingParticipant } from '@/components/meet/PeoplePanel';
 import MeetingInfoPanel from '@/components/meet/MeetingInfoPanel';
 import WhiteboardModal from '@/components/meet/WhiteboardModal';
 import ActivitiesModal from '@/components/meet/ActivitiesModal';
@@ -45,6 +53,11 @@ import HostControlsModal, { HostPermissions } from '@/components/meet/HostContro
 import LayoutSelectorModal, { MeetLayoutMode } from '@/components/meet/LayoutSelectorModal';
 import BackgroundsModal from '@/components/meet/BackgroundsModal';
 import AttendanceModal from '@/components/meet/AttendanceModal';
+import AICompanionModal, { TranscriptItem } from '@/components/meet/AICompanionModal';
+import SecurityShieldModal, { SecuritySettings } from '@/components/meet/SecurityShieldModal';
+import MeetingAgendaTimer from '@/components/meet/MeetingAgendaTimer';
+import ScheduleMeetingModal from '@/components/meet/ScheduleMeetingModal';
+import { createSimulatedPeerStream } from '@/lib/mock-stream';
 
 interface FloatingReaction {
   id: string;
@@ -59,6 +72,7 @@ export default function MeetingRoomPage() {
 
   // Lobby vs In-Call State
   const [hasJoined, setHasJoined] = useState(false);
+  const [isWaitingInLobby, setIsWaitingInLobby] = useState(false);
   const [displayName, setDisplayName] = useState('Tanmay');
 
   // Media & Device State
@@ -78,17 +92,62 @@ export default function MeetingRoomPage() {
   const [showCopiedToast, setShowCopiedToast] = useState(false);
   const [pinnedPeerId, setPinnedPeerId] = useState<string | null>(null);
 
-  // Advanced Google Meet Flagship Modals State
+  // Advanced Google Meet & Zoom Modals
   const [hostControlsOpen, setHostControlsOpen] = useState(false);
   const [layoutModalOpen, setLayoutModalOpen] = useState(false);
   const [backgroundsModalOpen, setBackgroundsModalOpen] = useState(false);
   const [attendanceModalOpen, setAttendanceModalOpen] = useState(false);
+  const [aiCompanionOpen, setAiCompanionOpen] = useState(false);
+  const [securityShieldOpen, setSecurityShieldOpen] = useState(false);
+  const [agendaTimerOpen, setAgendaTimerOpen] = useState(false);
+  const [scheduleModalOpen, setScheduleModalOpen] = useState(false);
+
+  // Spotlight for Everyone (Zoom & Google Meet Flagship)
+  const [spotlightedPeerId, setSpotlightedPeerId] = useState<string | null>(null);
+
+  // Non-verbal Feedback (Zoom Flagship)
+  const [myFeedback, setMyFeedback] = useState<string | null>(null);
+  const [feedbackCounts, setFeedbackCounts] = useState({
+    yes: 0,
+    no: 0,
+    slower: 0,
+    faster: 0,
+    coffee: 0,
+  });
+
+  // Waiting Room & Knocking List (Zoom Waiting Room & Google Meet Knock)
+  const [waitingList, setWaitingList] = useState<WaitingParticipant[]>([]);
+  const [topKnockNotice, setTopKnockNotice] = useState<WaitingParticipant | null>(null);
+
+  // AI Meeting Transcript Log
+  const [transcript, setTranscript] = useState<TranscriptItem[]>([
+    { id: 'init-1', speaker: 'Host', text: 'Welcome to this live video conference session.', time: '10:00 AM' }
+  ]);
+
+  // Visual & Studio Effects Settings
+  const [lowLightBoost, setLowLightBoost] = useState(false);
+  const [touchUpLevel, setTouchUpLevel] = useState(40);
+  const [noiseSuppression, setNoiseSuppression] = useState<'auto' | 'high' | 'original'>('auto');
 
   // Layout mode & tiles
   const [layoutMode, setLayoutMode] = useState<MeetLayoutMode>('auto');
   const [maxTiles, setMaxTiles] = useState(6);
 
-  // Host Permissions
+  // Host Permissions & Security Settings (Zoom & Google Meet)
+  const [securitySettings, setSecuritySettings] = useState<SecuritySettings>({
+    lockMeeting: false,
+    waitingRoom: true, // Enabled for realistic lobby demonstration
+    hideProfilePictures: false,
+    muteOnEntry: false,
+    allowScreenShare: true,
+    allowChat: true,
+    allowRename: true,
+    allowUnmute: true,
+    allowStartVideo: true,
+    allowWhiteboard: true,
+    allowReactions: true,
+  });
+
   const [hostPermissions, setHostPermissions] = useState<HostPermissions>({
     allowScreenShare: true,
     allowChat: true,
@@ -195,7 +254,7 @@ export default function MeetingRoomPage() {
     return () => unsubscribe();
   }, [roomId]);
 
-  // Speech Recognition setup for Live Captions (CC)
+  // Speech Recognition setup for Live Captions (CC) and AI Transcript
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
@@ -208,7 +267,21 @@ export default function MeetingRoomPage() {
       recognizer.onresult = (event: any) => {
         let interim = '';
         for (let i = event.resultIndex; i < event.results.length; ++i) {
-          interim += event.results[i][0].transcript;
+          const itemText = event.results[i][0].transcript;
+          interim += itemText;
+
+          if (event.results[i].isFinal) {
+            // Append final sentence to transcript for AI Meeting Companion
+            setTranscript(prev => [
+              ...prev,
+              {
+                id: Date.now().toString(),
+                speaker: displayName,
+                text: itemText.trim(),
+                time: new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+              }
+            ]);
+          }
         }
         setCaptionText(interim);
       };
@@ -216,7 +289,7 @@ export default function MeetingRoomPage() {
       recognizer.onerror = () => {};
       speechRecognitionRef.current = recognizer;
     }
-  }, []);
+  }, [displayName]);
 
   // Toggle Live Captions
   const handleToggleCaptions = () => {
@@ -238,6 +311,20 @@ export default function MeetingRoomPage() {
   // Join the Meeting Room
   const handleJoinMeeting = async (presentImmediately: boolean = false) => {
     try {
+      // If room is locked
+      if (securitySettings.lockMeeting && participants.length > 0) {
+        alert('This meeting is locked by the host. No new participants can join.');
+        return;
+      }
+
+      // Check if Waiting Room is enabled and I am not the first user (host)
+      if (securitySettings.waitingRoom && participants.length > 0 && !hasJoined && !isWaitingInLobby) {
+        // Put in waiting lobby
+        setIsWaitingInLobby(true);
+        soundManager.playDoorbellSound();
+        return;
+      }
+
       soundManager.playJoinSound();
 
       // Setup WebRTC manager
@@ -258,13 +345,14 @@ export default function MeetingRoomPage() {
       webrtcManagerRef.current = manager;
 
       // Register participant in Firestore
+      const isHost = participants.length === 0;
       const myDocRef = doc(db, 'meet_rooms', roomId, 'participants', myPeerIdRef.current);
       await setDoc(myDocRef, {
         name: displayName.trim() || 'Guest',
-        micMuted: micMuted,
+        micMuted: securitySettings.muteOnEntry ? true : micMuted,
         videoOff: videoOff,
         handRaised: false,
-        isHost: participants.length === 0,
+        isHost: isHost,
         joinedAt: Date.now(),
       });
 
@@ -276,6 +364,7 @@ export default function MeetingRoomPage() {
       });
 
       setHasJoined(true);
+      setIsWaitingInLobby(false);
 
       if (presentImmediately) {
         setTimeout(() => handleToggleScreenShare(), 500);
@@ -306,6 +395,11 @@ export default function MeetingRoomPage() {
 
   // Toggle Microphone
   const handleToggleMic = () => {
+    if (!securitySettings.allowUnmute && hasJoined && !isMeHost) {
+      alert('The host has disabled participant unmuting.');
+      return;
+    }
+
     const nextMuted = !micMuted;
     setMicMuted(nextMuted);
     if (localStream) {
@@ -321,6 +415,11 @@ export default function MeetingRoomPage() {
 
   // Toggle Video Camera
   const handleToggleVideo = () => {
+    if (!securitySettings.allowStartVideo && hasJoined && !isMeHost) {
+      alert('The host has disabled participant video cameras.');
+      return;
+    }
+
     const nextVideoOff = !videoOff;
     setVideoOff(nextVideoOff);
     if (localStream) {
@@ -349,6 +448,11 @@ export default function MeetingRoomPage() {
 
   // Toggle Screen Sharing
   const handleToggleScreenShare = async () => {
+    if (!securitySettings.allowScreenShare && !isMeHost) {
+      alert('Screen sharing is currently disabled by the host.');
+      return;
+    }
+
     if (isSharingScreen) {
       if (webrtcManagerRef.current) {
         webrtcManagerRef.current.stopScreenShare();
@@ -416,6 +520,114 @@ export default function MeetingRoomPage() {
     }, 3000);
   };
 
+  // Non-verbal Feedback (Zoom Flagship Feature: Yes, No, Slower, Faster, Away)
+  const handleSendFeedback = (type: 'yes' | 'no' | 'slower' | 'faster' | 'coffee') => {
+    const nextVal = myFeedback === type ? null : type;
+    setMyFeedback(nextVal);
+
+    setFeedbackCounts(prev => ({
+      ...prev,
+      [type]: nextVal ? prev[type] + 1 : Math.max(0, prev[type] - 1)
+    }));
+
+    if (hasJoined && myPeerIdRef.current) {
+      const myDocRef = doc(db, 'meet_rooms', roomId, 'participants', myPeerIdRef.current);
+      setDoc(myDocRef, { feedback: nextVal }, { merge: true }).catch(() => {});
+    }
+  };
+
+  // Clear all non-verbal feedback (Host action)
+  const handleClearFeedback = () => {
+    setFeedbackCounts({ yes: 0, no: 0, slower: 0, faster: 0, coffee: 0 });
+    setMyFeedback(null);
+    participants.forEach(p => {
+      const dRef = doc(db, 'meet_rooms', roomId, 'participants', p.peerId);
+      setDoc(dRef, { feedback: null }, { merge: true }).catch(() => {});
+    });
+  };
+
+  // Spotlight for Everyone (Zoom & Google Meet Flagship)
+  const handleToggleSpotlight = (peerId: string) => {
+    if (spotlightedPeerId === peerId) {
+      setSpotlightedPeerId(null);
+    } else {
+      setSpotlightedPeerId(peerId);
+      soundManager.playHandRaiseSound();
+    }
+  };
+
+  // Waiting Room Management
+  const handleAdmitGuest = (id: string) => {
+    const guest = waitingList.find(g => g.id === id);
+    if (!guest) return;
+
+    soundManager.playJoinSound();
+    setWaitingList(prev => prev.filter(g => g.id !== id));
+    if (topKnockNotice?.id === id) {
+      setTopKnockNotice(null);
+    }
+
+    // Add admitted guest directly as simulated or real participant
+    handleAddTestPeerNamed(guest.name);
+  };
+
+  const handleDenyGuest = (id: string) => {
+    soundManager.playLeaveSound();
+    setWaitingList(prev => prev.filter(g => g.id !== id));
+    if (topKnockNotice?.id === id) {
+      setTopKnockNotice(null);
+    }
+  };
+
+  const handleAdmitAll = () => {
+    soundManager.playJoinSound();
+    waitingList.forEach(w => {
+      handleAddTestPeerNamed(w.name);
+    });
+    setWaitingList([]);
+    setTopKnockNotice(null);
+  };
+
+  // Simulate a Knocking Guest in Waiting Room (for instant testing by host)
+  const handleSimulateKnock = () => {
+    const demoNames = ['Aarav Patel', 'Sneha Kulkarni', 'Vikram Malhotra', 'Pooja Iyer', 'Rohan Mehta'];
+    const randomName = demoNames[Math.floor(Math.random() * demoNames.length)];
+    const newGuest: WaitingParticipant = {
+      id: 'waiter_' + Math.random().toString(36).substring(2, 7),
+      name: randomName,
+      requestedAt: Date.now(),
+    };
+
+    soundManager.playDoorbellSound();
+    setWaitingList(prev => [...prev, newGuest]);
+    setTopKnockNotice(newGuest);
+
+    // Auto dismiss toast after 8 seconds, but keep in PeoplePanel
+    setTimeout(() => {
+      setTopKnockNotice(prev => prev?.id === newGuest.id ? null : prev);
+    }, 8000);
+  };
+
+  // Emergency Freeze: Suspend Participant Activities (Zoom Security Shield)
+  const handleSuspendParticipantActivities = () => {
+    setSecuritySettings(prev => ({
+      ...prev,
+      lockMeeting: true,
+      allowScreenShare: false,
+      allowChat: false,
+      allowUnmute: false,
+      allowStartVideo: false,
+      allowWhiteboard: false,
+    }));
+    handleMuteAll();
+    setIsSharingScreen(false);
+    if (screenStream) {
+      screenStream.getTracks().forEach(t => t.stop());
+      setScreenStream(null);
+    }
+    alert('🚨 Emergency Lockdown Active: All mics muted, cameras paused, screen share stopped, and meeting locked.');
+  };
+
   // Meeting Screen Recording (MediaRecorder)
   const handleToggleRecording = async () => {
     if (isRecording) {
@@ -440,59 +652,66 @@ export default function MeetingRoomPage() {
           const url = URL.createObjectURL(blob);
           const a = document.createElement('a');
           a.href = url;
-          a.download = `Google-Meet-Recording-${roomId}.webm`;
+          a.download = `Live-Meeting-Recording-${roomId}.webm`;
           a.click();
         };
         recorder.start(1000);
         mediaRecorderRef.current = recorder;
         setIsRecording(true);
       } catch (err) {
-        alert('Could not start recording: ' + err);
+        console.warn('Recording error:', err);
       }
     }
   };
 
   // Copy Meeting Join Link
   const handleCopyJoiningInfo = () => {
-    const url = typeof window !== 'undefined' ? `${window.location.origin}/meet/${roomId}` : `https://meet.google.com/${roomId}`;
+    const url = `${window.location.origin}/meet/${roomId}`;
     navigator.clipboard.writeText(url);
     setShowCopiedToast(true);
     setTimeout(() => setShowCopiedToast(false), 2500);
   };
 
-  // Spawn Simulated Colleague Peer
-  const handleAddTestPeer = async () => {
-    const peerId = 'peer_colleague_' + Math.random().toString(36).substring(2, 6);
-    const names = [
-      'Dr. Sharma (Senior Faculty)',
-      'Priya Verma (Host)',
-      'Rahul Mehta (IIT Bombay)',
-      'Dr. Sunita Mehta (Biology)',
-    ];
-    const randomName = names[Math.floor(Math.random() * names.length)];
-
-    const peerDocRef = doc(db, 'meet_rooms', roomId, 'participants', peerId);
-    await setDoc(peerDocRef, {
-      name: randomName,
-      micMuted: false,
-      videoOff: false,
-      handRaised: false,
-      isHost: false,
-      joinedAt: Date.now(),
-    });
-
-    const chatRef = collection(db, 'meet_rooms', roomId, 'messages');
-    await addDoc(chatRef, {
-      senderName: randomName,
-      senderPeerId: peerId,
-      text: `Hello everyone! Joining the live session for ${roomId}. Can you see the presentation?`,
-      createdAt: Date.now(),
-    });
+  // Add Simulated Test Peer
+  const handleAddTestPeer = () => {
+    const names = ['Priya Sharma', 'Rahul Verma', 'Ananya Gupta', 'Amit Patel', 'Sneha Rao'];
+    const chosen = names[Math.floor(Math.random() * names.length)];
+    handleAddTestPeerNamed(chosen);
   };
 
-  // All participants including "Me"
-  const isMeHost = participants.length === 0 || participants.find(p => p.peerId === myPeerIdRef.current)?.isHost === true;
+  const handleAddTestPeerNamed = (name: string) => {
+    const peerId = 'sim_' + Math.random().toString(36).substring(2, 7);
+    const mockStream = createSimulatedPeerStream(name);
 
+    setRemoteStreams(prev => ({ ...prev, [peerId]: mockStream }));
+    setParticipants(prev => [
+      ...prev,
+      {
+        peerId,
+        name,
+        isHost: false,
+        micMuted: false,
+        videoOff: false,
+        handRaised: false,
+      }
+    ]);
+    soundManager.playJoinSound();
+  };
+
+  // Remove participant from meeting (Host action)
+  const handleRemoveParticipant = (peerId: string) => {
+    setParticipants(prev => prev.filter(p => p.peerId !== peerId));
+    setRemoteStreams(prev => {
+      const next = { ...prev };
+      delete next[peerId];
+      return next;
+    });
+    soundManager.playLeaveSound();
+  };
+
+  const isMeHost = participants.find(p => p.peerId === myPeerIdRef.current)?.isHost || participants.length <= 1;
+
+  // Compute full participants list
   const allParticipantsList: ParticipantInfo[] = [
     {
       peerId: myPeerIdRef.current,
@@ -502,17 +721,80 @@ export default function MeetingRoomPage() {
       videoOff,
       handRaised,
       isMe: true,
+      feedback: myFeedback,
     },
     ...participants.filter(p => p.peerId !== myPeerIdRef.current)
   ];
 
   // Pinned or spotlight participant
-  const spotlightParticipant = pinnedPeerId 
-    ? allParticipantsList.find(p => p.peerId === pinnedPeerId) || allParticipantsList[0]
+  const targetSpotlightId = spotlightedPeerId || pinnedPeerId;
+  const spotlightParticipant = targetSpotlightId 
+    ? allParticipantsList.find(p => p.peerId === targetSpotlightId) || allParticipantsList[0]
     : allParticipantsList[0];
 
   // =========================================================================
-  // VIEW 1: PRE-CALL LOBBY / GREEN ROOM
+  // VIEW 1: WAITING ROOM LOBBY (Zoom Waiting Room & Google Meet Lobby)
+  // =========================================================================
+  if (isWaitingInLobby) {
+    return (
+      <div className="min-h-screen bg-slate-950 text-white flex flex-col font-sans select-none items-center justify-center p-4">
+        <div className="max-w-md w-full bg-slate-900 border border-slate-800 rounded-3xl p-8 text-center space-y-6 shadow-2xl animate-in zoom-in-95">
+          <div className="w-16 h-16 mx-auto rounded-3xl bg-indigo-600/20 text-indigo-400 flex items-center justify-center border border-indigo-500/30 animate-pulse">
+            <DoorClosed className="w-8 h-8" />
+          </div>
+
+          <div className="space-y-2">
+            <h2 className="text-xl font-bold text-white">
+              Please wait, the meeting host will let you in soon.
+            </h2>
+            <p className="text-xs text-slate-400">
+              Meeting ID: <span className="font-mono text-indigo-400 font-semibold">{roomId}</span>
+            </p>
+          </div>
+
+          {/* Camera preview window while waiting */}
+          <div className="relative aspect-video rounded-2xl bg-black overflow-hidden border border-slate-800">
+            <video
+              ref={(ref) => {
+                if (ref && localStream) ref.srcObject = localStream;
+              }}
+              autoPlay
+              playsInline
+              muted
+              className={`w-full h-full object-cover scale-x-[-1] ${videoOff ? 'hidden' : 'block'}`}
+            />
+            {videoOff && (
+              <div className="w-full h-full flex items-center justify-center text-xs text-slate-400">
+                Camera is off
+              </div>
+            )}
+            <div className="absolute bottom-2 left-2 px-2.5 py-1 rounded-full bg-black/60 text-white text-[11px] font-medium backdrop-blur-md">
+              {displayName} (Knocking...)
+            </div>
+          </div>
+
+          <div className="space-y-3 pt-2">
+            <button
+              onClick={() => handleJoinMeeting(false)}
+              className="w-full py-3 rounded-full bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs transition-colors shadow-lg shadow-indigo-600/25"
+            >
+              Enter Call Directly (Host Override)
+            </button>
+
+            <button
+              onClick={() => setIsWaitingInLobby(false)}
+              className="w-full py-2.5 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium text-xs transition-colors"
+            >
+              Return to Lobby
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // =========================================================================
+  // VIEW 2: PRE-CALL GREEN ROOM
   // =========================================================================
   if (!hasJoined) {
     return (
@@ -523,7 +805,7 @@ export default function MeetingRoomPage() {
           <Link href="/" className="flex items-center gap-2 group">
             <ArrowLeft className="w-4 h-4 text-slate-400 group-hover:text-white transition-colors" />
             <span className="text-sm font-semibold text-slate-300 group-hover:text-white">
-              Google Meet Home
+              Google Meet & Zoom
             </span>
           </Link>
 
@@ -531,6 +813,13 @@ export default function MeetingRoomPage() {
             <span className="text-xs text-slate-400 font-mono">
               Meeting ID: {roomId}
             </span>
+            <button
+              onClick={() => setScheduleModalOpen(true)}
+              className="px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 text-xs font-medium flex items-center gap-1.5 border border-slate-800"
+            >
+              <Calendar className="w-3.5 h-3.5 text-blue-400" />
+              <span>Schedule</span>
+            </button>
           </div>
         </header>
 
@@ -553,7 +842,9 @@ export default function MeetingRoomPage() {
                 className={`w-full h-full object-cover scale-x-[-1] transition-all ${
                   videoOff ? 'hidden' : 'block'
                 }`}
-                style={{ filter: filterEffect }}
+                style={{ 
+                  filter: `${filterEffect} ${lowLightBoost ? 'brightness(1.2) contrast(1.08)' : ''}`,
+                }}
               />
 
               {/* Avatar when Camera Off */}
@@ -611,7 +902,7 @@ export default function MeetingRoomPage() {
             <div className="flex items-center justify-between px-2 text-xs text-slate-400">
               <span className="flex items-center gap-1.5 font-medium">
                 <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
-                Visual Effects:
+                Virtual Effects & Studio Touch Up:
               </span>
               <button
                 onClick={() => setBackgroundsModalOpen(true)}
@@ -693,6 +984,18 @@ export default function MeetingRoomPage() {
           onClose={() => setBackgroundsModalOpen(false)}
           currentFilter={filterEffect}
           onSelectFilter={(f) => setFilterEffect(f)}
+          lowLightBoost={lowLightBoost}
+          onToggleLowLight={() => setLowLightBoost(!lowLightBoost)}
+          touchUpLevel={touchUpLevel}
+          onChangeTouchUp={(lvl) => setTouchUpLevel(lvl)}
+          noiseSuppression={noiseSuppression}
+          onChangeNoiseSuppression={(mode) => setNoiseSuppression(mode)}
+        />
+
+        <ScheduleMeetingModal
+          isOpen={scheduleModalOpen}
+          onClose={() => setScheduleModalOpen(false)}
+          defaultRoomCode={roomId}
         />
 
       </div>
@@ -700,7 +1003,7 @@ export default function MeetingRoomPage() {
   }
 
   // =========================================================================
-  // VIEW 2: IN-CALL GOOGLE MEET INTERFACE
+  // VIEW 3: IN-CALL GOOGLE MEET & ZOOM INTERFACE
   // =========================================================================
 
   const visibleParticipants = allParticipantsList.slice(0, maxTiles);
@@ -713,6 +1016,34 @@ export default function MeetingRoomPage() {
         <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-full bg-slate-800 text-white text-xs font-semibold flex items-center gap-2 shadow-2xl border border-slate-700 animate-in fade-in slide-in-from-top-2">
           <Check className="w-4 h-4 text-emerald-400" />
           <span>Joining info copied to clipboard</span>
+        </div>
+      )}
+
+      {/* Floating Knock Alert Banner for Host (Zoom Waiting Room & Meet Knock) */}
+      {isMeHost && topKnockNotice && (
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-2xl bg-slate-900/95 border border-amber-500/50 text-white text-xs font-semibold flex items-center gap-4 shadow-2xl backdrop-blur-md animate-in slide-in-from-top duration-200">
+          <div className="flex items-center gap-2">
+            <DoorClosed className="w-4 h-4 text-amber-400 animate-bounce" />
+            <div>
+              <span className="font-bold text-amber-300">{topKnockNotice.name}</span>
+              <span className="text-slate-300 ml-1">is in the waiting room</span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => handleAdmitGuest(topKnockNotice.id)}
+              className="py-1 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-colors shadow-sm"
+            >
+              Admit
+            </button>
+            <button
+              onClick={() => handleDenyGuest(topKnockNotice.id)}
+              className="py-1 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium transition-colors"
+            >
+              Deny
+            </button>
+          </div>
         </div>
       )}
 
@@ -735,20 +1066,32 @@ export default function MeetingRoomPage() {
         {/* Center Video Stage */}
         <div className="flex-1 flex flex-col p-3 sm:p-4 overflow-hidden relative">
           
-          {/* Top Stage Bar: Meeting Code & Add Colleague Simulator */}
+          {/* Top Stage Bar: Meeting Code, Spotlight status & Simulators */}
           <div className="h-8 flex items-center justify-between text-xs px-2 mb-2">
             <div className="flex items-center gap-2">
               <span className="font-mono text-slate-400 font-semibold">{roomId}</span>
               <span className="text-slate-600">•</span>
               <span className="text-slate-400">{allParticipantsList.length} in call</span>
-              {layoutMode !== 'auto' && (
-                <span className="px-2 py-0.5 rounded-full bg-slate-800 text-[10px] text-blue-400 capitalize">
-                  Layout: {layoutMode}
+              
+              {spotlightedPeerId && (
+                <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 text-[10px] font-bold border border-amber-500/40 flex items-center gap-1">
+                  <Star className="w-3 h-3 fill-current" />
+                  <span>Spotlight Active</span>
                 </span>
+              )}
+
+              {waitingList.length > 0 && isMeHost && (
+                <button
+                  onClick={() => setActiveSidePanel('people')}
+                  className="px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 text-[10px] font-bold border border-indigo-500/40 flex items-center gap-1 animate-pulse"
+                >
+                  <DoorClosed className="w-3 h-3" />
+                  <span>{waitingList.length} Waiting</span>
+                </button>
               )}
             </div>
 
-            {/* Quick Test Peer Button */}
+            {/* Quick Test Peer & Knock Simulators */}
             <div className="flex items-center gap-2">
               <button
                 onClick={handleAddTestPeer}
@@ -756,13 +1099,24 @@ export default function MeetingRoomPage() {
                 title="Add a colleague simulation into this call to test multi-person grid"
               >
                 <Plus className="w-3.5 h-3.5 text-indigo-400" />
-                <span>+ टेस्ट प्रतिभागी जोड़ें (Test Peer)</span>
+                <span>+ Test Peer</span>
               </button>
+
+              {isMeHost && (
+                <button
+                  onClick={handleSimulateKnock}
+                  className="px-2.5 py-1 rounded-full bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-800 text-[11px] font-semibold flex items-center gap-1.5 transition-colors"
+                  title="Simulate someone knocking in the waiting room"
+                >
+                  <DoorClosed className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Simulate Knock</span>
+                </button>
+              )}
             </div>
           </div>
 
           {/* SCREEN SHARING OR SPOTLIGHT MODE */}
-          {(isSharingScreen && screenStream) || layoutMode === 'spotlight' ? (
+          {(isSharingScreen && screenStream) || targetSpotlightId ? (
             <div className="flex-1 flex flex-col lg:flex-row gap-3 overflow-hidden">
               {/* Spotlight Center */}
               <div className="flex-1 rounded-2xl bg-black border border-slate-800 overflow-hidden relative flex items-center justify-center">
@@ -790,8 +1144,12 @@ export default function MeetingRoomPage() {
                     videoOff={spotlightParticipant.videoOff}
                     handRaised={spotlightParticipant.handRaised}
                     isSpeaking={spotlightParticipant.isMe ? isSpeakingMe : false}
-                    isPinned={true}
-                    onTogglePin={() => setPinnedPeerId(null)}
+                    isPinned={pinnedPeerId === spotlightParticipant.peerId}
+                    isSpotlighted={spotlightedPeerId === spotlightParticipant.peerId}
+                    feedbackBadge={spotlightParticipant.feedback}
+                    canSpotlight={isMeHost}
+                    onTogglePin={() => setPinnedPeerId(pinnedPeerId === spotlightParticipant.peerId ? null : spotlightParticipant.peerId)}
+                    onToggleSpotlight={() => handleToggleSpotlight(spotlightParticipant.peerId)}
                   />
                 )}
               </div>
@@ -810,7 +1168,12 @@ export default function MeetingRoomPage() {
                         videoOff={p.videoOff}
                         handRaised={p.handRaised}
                         isSpeaking={p.isMe ? isSpeakingMe : false}
+                        isPinned={pinnedPeerId === p.peerId}
+                        isSpotlighted={spotlightedPeerId === p.peerId}
+                        feedbackBadge={p.feedback}
+                        canSpotlight={isMeHost}
                         onTogglePin={() => setPinnedPeerId(p.peerId)}
+                        onToggleSpotlight={() => handleToggleSpotlight(p.peerId)}
                       />
                     </div>
                   );
@@ -829,6 +1192,8 @@ export default function MeetingRoomPage() {
                   videoOff={allParticipantsList[0].videoOff}
                   handRaised={allParticipantsList[0].handRaised}
                   isSpeaking={allParticipantsList[0].isMe ? isSpeakingMe : false}
+                  canSpotlight={isMeHost}
+                  onToggleSpotlight={() => handleToggleSpotlight(allParticipantsList[0].peerId)}
                 />
               </div>
               <div className="w-full lg:w-64 h-32 lg:h-full overflow-x-auto lg:overflow-y-auto flex lg:flex-col gap-3 shrink-0">
@@ -844,6 +1209,8 @@ export default function MeetingRoomPage() {
                         videoOff={p.videoOff}
                         handRaised={p.handRaised}
                         isSpeaking={p.isMe ? isSpeakingMe : false}
+                        canSpotlight={isMeHost}
+                        onToggleSpotlight={() => handleToggleSpotlight(p.peerId)}
                       />
                     </div>
                   );
@@ -876,8 +1243,13 @@ export default function MeetingRoomPage() {
                       videoOff={p.videoOff}
                       handRaised={p.handRaised}
                       isSpeaking={p.isMe ? isSpeakingMe : false}
-                      filterEffect={p.isMe ? filterEffect : 'none'}
+                      filterEffect={p.isMe ? `${filterEffect} ${lowLightBoost ? 'brightness(1.2)' : ''}` : 'none'}
+                      isPinned={pinnedPeerId === p.peerId}
+                      isSpotlighted={spotlightedPeerId === p.peerId}
+                      feedbackBadge={p.feedback}
+                      canSpotlight={isMeHost}
                       onTogglePin={() => setPinnedPeerId(p.peerId)}
+                      onToggleSpotlight={() => handleToggleSpotlight(p.peerId)}
                     />
                   );
                 })}
@@ -904,15 +1276,25 @@ export default function MeetingRoomPage() {
           myName={displayName}
           isOpen={activeSidePanel === 'chat'}
           onClose={() => setActiveSidePanel('none')}
+          participants={allParticipantsList.map(p => ({ peerId: p.peerId, name: p.name }))}
         />
 
         <PeoplePanel
           participants={allParticipantsList}
+          waitingList={waitingList}
           myPeerId={myPeerIdRef.current}
+          isHost={isMeHost}
+          spotlightedPeerId={spotlightedPeerId}
           isOpen={activeSidePanel === 'people'}
           onClose={() => setActiveSidePanel('none')}
           onCopyLink={handleCopyJoiningInfo}
           onMuteAll={handleMuteAll}
+          onAdmit={handleAdmitGuest}
+          onDeny={handleDenyGuest}
+          onAdmitAll={handleAdmitAll}
+          onSimulateKnock={handleSimulateKnock}
+          onToggleSpotlight={handleToggleSpotlight}
+          onRemoveParticipant={handleRemoveParticipant}
         />
 
         <MeetingInfoPanel
@@ -953,10 +1335,14 @@ export default function MeetingRoomPage() {
         onToggleCaptions={handleToggleCaptions}
         onToggleRecording={handleToggleRecording}
         onSendReaction={handleSendReaction}
+        onSendFeedback={handleSendFeedback}
         onOpenWhiteboard={() => setWhiteboardOpen(true)}
         onOpenBackgrounds={() => setBackgroundsModalOpen(true)}
         onOpenLayoutModal={() => setLayoutModalOpen(true)}
         onOpenHostControls={() => setHostControlsOpen(true)}
+        onOpenSecurityShield={() => setSecurityShieldOpen(true)}
+        onOpenAICompanion={() => setAiCompanionOpen(true)}
+        onOpenAgendaTimer={() => setAgendaTimerOpen(true)}
         onOpenAttendance={() => setAttendanceModalOpen(true)}
         onTogglePiP={handleTogglePiP}
         onTogglePanel={(p) => setActiveSidePanel(prev => prev === p ? 'none' : p)}
@@ -980,6 +1366,39 @@ export default function MeetingRoomPage() {
         onMuteAll={handleMuteAll}
       />
 
+      {/* Zoom Security Shield Modal */}
+      <SecurityShieldModal
+        isOpen={securityShieldOpen}
+        onClose={() => setSecurityShieldOpen(false)}
+        isHost={isMeHost}
+        settings={securitySettings}
+        onChangeSettings={(s) => setSecuritySettings(s)}
+        onSuspendAllActivities={handleSuspendParticipantActivities}
+        onMuteAll={handleMuteAll}
+      />
+
+      {/* AI Companion & Smart Meeting Minutes (Gemini & Duet AI) */}
+      <AICompanionModal
+        isOpen={aiCompanionOpen}
+        onClose={() => setAiCompanionOpen(false)}
+        roomId={roomId}
+        transcript={transcript}
+      />
+
+      {/* Meeting Countdown Timer & Topic Agenda Checklist */}
+      <MeetingAgendaTimer
+        isHost={isMeHost}
+        isOpen={agendaTimerOpen}
+        onClose={() => setAgendaTimerOpen(false)}
+      />
+
+      {/* Schedule Meeting Modal */}
+      <ScheduleMeetingModal
+        isOpen={scheduleModalOpen}
+        onClose={() => setScheduleModalOpen(false)}
+        defaultRoomCode={roomId}
+      />
+
       {/* Change Layout Modal */}
       <LayoutSelectorModal
         isOpen={layoutModalOpen}
@@ -996,6 +1415,12 @@ export default function MeetingRoomPage() {
         onClose={() => setBackgroundsModalOpen(false)}
         currentFilter={filterEffect}
         onSelectFilter={(f) => setFilterEffect(f)}
+        lowLightBoost={lowLightBoost}
+        onToggleLowLight={() => setLowLightBoost(!lowLightBoost)}
+        touchUpLevel={touchUpLevel}
+        onChangeTouchUp={(lvl) => setTouchUpLevel(lvl)}
+        noiseSuppression={noiseSuppression}
+        onChangeNoiseSuppression={(mode) => setNoiseSuppression(mode)}
       />
 
       {/* Attendance Report Modal */}

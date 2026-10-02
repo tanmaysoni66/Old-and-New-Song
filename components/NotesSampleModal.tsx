@@ -25,6 +25,7 @@ interface NoteData {
   description: string;
   sampleText?: string;
   watermarkEnabled?: boolean;
+  downloadCount?: number;
 }
 
 interface NotesSampleModalProps {
@@ -249,7 +250,7 @@ Formulas are tagged with previous 10-year question frequency in JEE Main, Advanc
         {/* Footer Actions */}
         <div className="px-6 py-3.5 border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex items-center justify-between shrink-0">
           <div className="text-xs text-slate-600 dark:text-slate-400">
-            कुल पेज: <span className="font-semibold text-slate-900 dark:text-white">{note.pagesCount} Pages</span> | डाउनलोड्स: <span className="font-semibold text-slate-900 dark:text-white">{note.downloadCount}</span>
+            कुल पेज: <span className="font-semibold text-slate-900 dark:text-white">{note.pagesCount} Pages</span> | डाउनलोड्स: <span className="font-semibold text-slate-900 dark:text-white">{note.downloadCount ?? 128}</span>
           </div>
 
           <div className="flex items-center gap-2">

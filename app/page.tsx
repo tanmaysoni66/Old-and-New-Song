@@ -22,6 +22,7 @@ import {
   ArrowRight
 } from 'lucide-react';
 import MeetHeader from '@/components/meet/MeetHeader';
+import ScheduleMeetingModal from '@/components/meet/ScheduleMeetingModal';
 
 export default function MeetHomePage() {
   const router = useRouter();
@@ -30,6 +31,7 @@ export default function MeetHomePage() {
   const [createdLaterLink, setCreatedLaterLink] = useState<string | null>(null);
   const [copiedLink, setCopiedLink] = useState(false);
   const [activeSlide, setActiveSlide] = useState(0);
+  const [scheduleModalOpen, setScheduleModalOpen] = useState(false);
 
   // Generate random Google Meet format code e.g. "xqm-vwrt-kzp"
   const generateMeetingCode = () => {
@@ -165,7 +167,7 @@ export default function MeetHomePage() {
                   <button
                     onClick={() => {
                       setNewMeetingMenuOpen(false);
-                      handleStartInstantMeeting();
+                      setScheduleModalOpen(true);
                     }}
                     className="w-full px-3 py-3 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center gap-3 transition-colors"
                   >
@@ -331,6 +333,12 @@ export default function MeetHomePage() {
           </div>
         </div>
       )}
+
+      {/* Schedule Meeting Modal */}
+      <ScheduleMeetingModal
+        isOpen={scheduleModalOpen}
+        onClose={() => setScheduleModalOpen(false)}
+      />
 
       {/* Minimal Footer */}
       <footer className="py-4 px-6 border-t border-slate-200 dark:border-slate-800 text-xs text-slate-500 flex flex-wrap items-center justify-between gap-3">

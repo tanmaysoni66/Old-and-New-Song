@@ -6,7 +6,8 @@ import {
   MicOff, 
   Pin, 
   Hand, 
-  Maximize2 
+  Star,
+  Sparkles
 } from 'lucide-react';
 
 interface VideoTileProps {
@@ -18,8 +19,12 @@ interface VideoTileProps {
   handRaised?: boolean;
   isSpeaking?: boolean;
   isPinned?: boolean;
+  isSpotlighted?: boolean;
+  feedbackBadge?: string | null;
   filterEffect?: string;
   onTogglePin?: () => void;
+  onToggleSpotlight?: () => void;
+  canSpotlight?: boolean;
 }
 
 export default function VideoTile({
@@ -31,8 +36,12 @@ export default function VideoTile({
   handRaised,
   isSpeaking,
   isPinned,
+  isSpotlighted,
+  feedbackBadge,
   filterEffect,
   onTogglePin,
+  onToggleSpotlight,
+  canSpotlight,
 }: VideoTileProps) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
@@ -48,12 +57,22 @@ export default function VideoTile({
 
   const initial = name ? name.charAt(0).toUpperCase() : 'U';
 
+  const feedbackEmojiMap: Record<string, string> = {
+    yes: '🟢 Yes',
+    no: '🔴 No',
+    slower: '🐢 Slower',
+    faster: '🐇 Faster',
+    coffee: '☕ Away',
+  };
+
   return (
     <div 
       className={`relative w-full h-full bg-slate-900 rounded-2xl overflow-hidden flex items-center justify-center select-none transition-all border ${
-        isSpeaking
-          ? 'border-blue-500 ring-4 ring-blue-500/40 shadow-xl shadow-blue-500/10'
-          : 'border-slate-800'
+        isSpotlighted
+          ? 'border-amber-400 ring-4 ring-amber-400/50 shadow-2xl shadow-amber-500/20'
+          : isSpeaking
+            ? 'border-blue-500 ring-4 ring-blue-500/40 shadow-xl shadow-blue-500/10'
+            : 'border-slate-800'
       }`}
     >
       
@@ -83,31 +102,65 @@ export default function VideoTile({
         </div>
       )}
 
-      {/* Hand Raised Banner / Badge */}
-      {handRaised && (
-        <div className="absolute top-3 left-3 px-3 py-1.5 rounded-full bg-amber-500/90 backdrop-blur-md text-slate-950 font-bold text-xs flex items-center gap-1.5 shadow-lg animate-bounce">
-          <Hand className="w-3.5 h-3.5 fill-current" />
-          <span>Hand raised</span>
-        </div>
-      )}
+      {/* Top Left Badges Container */}
+      <div className="absolute top-3 left-3 flex flex-col gap-1.5 z-20">
+        {/* Spotlight Badge */}
+        {isSpotlighted && (
+          <div className="px-2.5 py-1 rounded-full bg-amber-500 text-slate-950 font-bold text-[11px] flex items-center gap-1 shadow-lg">
+            <Star className="w-3.5 h-3.5 fill-current" />
+            <span>Spotlight</span>
+          </div>
+        )}
 
-      {/* Pin Button */}
-      {onTogglePin && (
-        <button
-          onClick={onTogglePin}
-          className={`absolute top-3 right-3 p-2 rounded-full backdrop-blur-md transition-colors ${
-            isPinned
-              ? 'bg-blue-600 text-white'
-              : 'bg-black/40 text-slate-300 hover:bg-black/60 hover:text-white'
-          }`}
-          title={isPinned ? 'Unpin' : 'Pin to spotlight'}
-        >
-          <Pin className="w-3.5 h-3.5" />
-        </button>
-      )}
+        {/* Hand Raised Banner / Badge */}
+        {handRaised && (
+          <div className="px-2.5 py-1 rounded-full bg-amber-500/90 backdrop-blur-md text-slate-950 font-bold text-xs flex items-center gap-1.5 shadow-lg animate-bounce">
+            <Hand className="w-3.5 h-3.5 fill-current" />
+            <span>Hand raised</span>
+          </div>
+        )}
+
+        {/* Non-Verbal Feedback Badge (Zoom Flagship) */}
+        {feedbackBadge && feedbackEmojiMap[feedbackBadge] && (
+          <div className="px-2.5 py-1 rounded-full bg-slate-900/90 border border-slate-700 backdrop-blur-md text-white font-semibold text-[11px] flex items-center gap-1 shadow-md">
+            <span>{feedbackEmojiMap[feedbackBadge]}</span>
+          </div>
+        )}
+      </div>
+
+      {/* Top Right Pin & Spotlight Controls */}
+      <div className="absolute top-3 right-3 flex items-center gap-1.5 z-20">
+        {canSpotlight && onToggleSpotlight && (
+          <button
+            onClick={onToggleSpotlight}
+            className={`p-2 rounded-full backdrop-blur-md transition-colors ${
+              isSpotlighted
+                ? 'bg-amber-500 text-slate-950'
+                : 'bg-black/40 text-slate-300 hover:bg-black/60 hover:text-white'
+            }`}
+            title={isSpotlighted ? 'Remove Spotlight' : 'Spotlight for Everyone'}
+          >
+            <Star className="w-3.5 h-3.5" />
+          </button>
+        )}
+
+        {onTogglePin && (
+          <button
+            onClick={onTogglePin}
+            className={`p-2 rounded-full backdrop-blur-md transition-colors ${
+              isPinned
+                ? 'bg-blue-600 text-white'
+                : 'bg-black/40 text-slate-300 hover:bg-black/60 hover:text-white'
+            }`}
+            title={isPinned ? 'Unpin' : 'Pin to my screen'}
+          >
+            <Pin className="w-3.5 h-3.5" />
+          </button>
+        )}
+      </div>
 
       {/* Bottom Name Pill & Audio Status */}
-      <div className="absolute bottom-3 left-3 px-3 py-1.5 rounded-full bg-black/60 backdrop-blur-md flex items-center gap-2 text-white text-xs font-medium max-w-[80%]">
+      <div className="absolute bottom-3 left-3 px-3 py-1.5 rounded-full bg-black/60 backdrop-blur-md flex items-center gap-2 text-white text-xs font-medium max-w-[80%] z-20">
         <span className="truncate">
           {name} {isMe && '(You)'}
         </span>

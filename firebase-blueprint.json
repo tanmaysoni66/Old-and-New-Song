@@ -157,9 +157,29 @@
         "createdAt": { "type": "string" }
       },
       "required": ["roomId", "title", "hostName"]
+    },
+    "AnalyticsSummary": {
+      "title": "AnalyticsSummary",
+      "description": "Aggregated academy and meeting statistics",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "totalStudents": { "type": "number" },
+        "totalRevenue": { "type": "number" },
+        "activeBatches": { "type": "number" },
+        "updatedAt": { "type": "string" }
+      }
     }
   },
   "firestore": {
+    "/test/{docId}": {
+      "schema": "AnalyticsSummary",
+      "description": "Connection test probe"
+    },
+    "/analytics/{docId}": {
+      "schema": "AnalyticsSummary",
+      "description": "Console analytics data and metrics"
+    },
     "/admissions/{admissionId}": {
       "schema": "Admission",
       "description": "Collection of student admission forms"

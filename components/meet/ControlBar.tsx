@@ -21,10 +21,19 @@ import {
   Sparkles, 
   Settings, 
   Circle,
-  ShieldCheck,
+  ShieldCheck, 
   Grid,
   FileSpreadsheet,
-  PictureInPicture2
+  PictureInPicture2,
+  Clock,
+  Bot,
+  DoorClosed,
+  Lock,
+  ThumbsUp,
+  ThumbsDown,
+  CheckCircle2,
+  XCircle,
+  Coffee
 } from 'lucide-react';
 
 interface ControlBarProps {
@@ -45,10 +54,14 @@ interface ControlBarProps {
   onToggleCaptions: () => void;
   onToggleRecording: () => void;
   onSendReaction: (emoji: string) => void;
+  onSendFeedback?: (type: 'yes' | 'no' | 'slower' | 'faster' | 'coffee') => void;
   onOpenWhiteboard: () => void;
   onOpenBackgrounds: () => void;
   onOpenLayoutModal: () => void;
   onOpenHostControls: () => void;
+  onOpenSecurityShield: () => void;
+  onOpenAICompanion: () => void;
+  onOpenAgendaTimer: () => void;
   onOpenAttendance: () => void;
   onTogglePiP: () => void;
   onTogglePanel: (panel: 'info' | 'people' | 'chat' | 'activities') => void;
@@ -57,6 +70,14 @@ interface ControlBarProps {
 }
 
 const REACTIONS = ['💖', '👍', '👏', '😂', '😮', '🎉', '🔥', '🚀'];
+
+const NON_VERBAL = [
+  { id: 'yes', label: 'Yes', icon: '🟢' },
+  { id: 'no', label: 'No', icon: '🔴' },
+  { id: 'slower', label: 'Slower', icon: '🐢' },
+  { id: 'faster', label: 'Faster', icon: '🐇' },
+  { id: 'coffee', label: 'Away', icon: '☕' },
+];
 
 export default function ControlBar({
   roomId,
@@ -76,10 +97,14 @@ export default function ControlBar({
   onToggleCaptions,
   onToggleRecording,
   onSendReaction,
+  onSendFeedback,
   onOpenWhiteboard,
   onOpenBackgrounds,
   onOpenLayoutModal,
   onOpenHostControls,
+  onOpenSecurityShield,
+  onOpenAICompanion,
+  onOpenAgendaTimer,
   onOpenAttendance,
   onTogglePiP,
   onTogglePanel,
@@ -90,30 +115,44 @@ export default function ControlBar({
   const [showMoreMenu, setShowMoreMenu] = useState(false);
 
   return (
-    <footer className="h-20 bg-slate-950 px-4 sm:px-6 flex items-center justify-between border-t border-slate-900 select-none relative z-40">
+    <footer className="h-20 bg-slate-950 px-3 sm:px-6 flex items-center justify-between border-t border-slate-900 select-none relative z-40">
       
-      {/* Left: Time & Room Code */}
-      <div className="hidden md:flex items-center gap-2 text-white">
+      {/* Left: Time & Room Code & Quick Host Tools */}
+      <div className="hidden lg:flex items-center gap-2 text-white">
         <span className="font-mono text-xs font-semibold tracking-wider text-slate-300">
           {roomId}
         </span>
-        <button
-          onClick={() => onTogglePanel('info')}
-          className="text-[11px] text-slate-400 hover:text-white underline ml-1"
-        >
-          Details
-        </button>
 
         {isRecording && (
-          <div className="flex items-center gap-1.5 ml-3 px-2 py-0.5 rounded-full bg-rose-950/80 border border-rose-500/40 text-rose-400 text-[10px] font-bold animate-pulse">
+          <div className="flex items-center gap-1.5 ml-2 px-2 py-0.5 rounded-full bg-rose-950/80 border border-rose-500/40 text-rose-400 text-[10px] font-bold animate-pulse">
             <Circle className="w-2.5 h-2.5 fill-rose-500" />
             <span>REC</span>
           </div>
         )}
+
+        {/* Meeting Timer & Agenda Button */}
+        <button
+          onClick={onOpenAgendaTimer}
+          className="ml-2 px-2.5 py-1 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white text-xs font-medium flex items-center gap-1.5 border border-slate-800 transition-colors"
+          title="Meeting Timer & Agenda"
+        >
+          <Clock className="w-3.5 h-3.5 text-amber-400" />
+          <span>Timer & Agenda</span>
+        </button>
+
+        {/* AI Companion Quick Button */}
+        <button
+          onClick={onOpenAICompanion}
+          className="px-2.5 py-1 rounded-xl bg-indigo-950/60 hover:bg-indigo-900/60 text-indigo-300 hover:text-white text-xs font-medium flex items-center gap-1.5 border border-indigo-700/50 shadow-sm transition-colors"
+          title="AI Companion & Live Meeting Minutes (Gemini & Duet AI)"
+        >
+          <Bot className="w-3.5 h-3.5 text-indigo-400" />
+          <span>AI Companion</span>
+        </button>
       </div>
 
-      {/* Center Action Buttons (The Google Meet Signature Dock) */}
-      <div className="flex items-center gap-2 sm:gap-3 mx-auto md:mx-0">
+      {/* Center Action Buttons (Google Meet & Zoom Signature Dock) */}
+      <div className="flex items-center gap-1.5 sm:gap-2.5 mx-auto md:mx-0">
         
         {/* Microphone Toggle */}
         <button
@@ -167,33 +206,56 @@ export default function ControlBar({
           <Hand className="w-5 h-5" />
         </button>
 
-        {/* Reactions / Emojis */}
+        {/* Reactions / Emojis & Zoom Non-Verbal Feedback */}
         <div className="relative">
           <button
             onClick={() => setShowReactions(!showReactions)}
             className={`w-10 h-10 sm:w-11 sm:h-11 rounded-full flex items-center justify-center transition-all ${
               showReactions ? 'bg-slate-700 text-white' : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
             }`}
-            title="Send a reaction"
+            title="Send reactions & Non-verbal feedback (Zoom)"
           >
             <Smile className="w-5 h-5" />
           </button>
 
-          {/* Reaction Popover */}
+          {/* Reaction & Non-Verbal Popover */}
           {showReactions && (
-            <div className="absolute bottom-14 left-1/2 -translate-x-1/2 p-2 bg-slate-800/95 backdrop-blur-md rounded-full shadow-2xl border border-slate-700 flex items-center gap-1 z-50 animate-in zoom-in-95">
-              {REACTIONS.map((emoji) => (
-                <button
-                  key={emoji}
-                  onClick={() => {
-                    onSendReaction(emoji);
-                    setShowReactions(false);
-                  }}
-                  className="w-8 h-8 rounded-full hover:bg-slate-700 hover:scale-125 transition-all text-base flex items-center justify-center"
-                >
-                  {emoji}
-                </button>
-              ))}
+            <div className="absolute bottom-14 left-1/2 -translate-x-1/2 p-3 bg-slate-900/95 backdrop-blur-md rounded-2xl shadow-2xl border border-slate-700 z-50 animate-in zoom-in-95 space-y-2.5 min-w-[280px]">
+              {/* Emojis row */}
+              <div className="flex items-center justify-between gap-1">
+                {REACTIONS.map((emoji) => (
+                  <button
+                    key={emoji}
+                    onClick={() => {
+                      onSendReaction(emoji);
+                      setShowReactions(false);
+                    }}
+                    className="w-8 h-8 rounded-full hover:bg-slate-800 hover:scale-125 transition-all text-base flex items-center justify-center"
+                  >
+                    {emoji}
+                  </button>
+                ))}
+              </div>
+
+              {/* Non-Verbal Feedback row (Zoom flagship) */}
+              {onSendFeedback && (
+                <div className="pt-2 border-t border-slate-800 flex items-center justify-between gap-1">
+                  {NON_VERBAL.map((item) => (
+                    <button
+                      key={item.id}
+                      onClick={() => {
+                        onSendFeedback(item.id as any);
+                        setShowReactions(false);
+                      }}
+                      className="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs flex items-center gap-1 text-slate-200 transition-colors"
+                      title={item.label}
+                    >
+                      <span>{item.icon}</span>
+                      <span className="text-[10px] font-medium">{item.label}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -220,6 +282,15 @@ export default function ControlBar({
           <PenTool className="w-5 h-5" />
         </button>
 
+        {/* Zoom Security Shield Quick Button (Host & Security Controls) */}
+        <button
+          onClick={onOpenSecurityShield}
+          className="w-10 h-10 sm:w-11 sm:h-11 rounded-full flex items-center justify-center bg-slate-800 hover:bg-slate-700 text-emerald-400 transition-all"
+          title="Security & Waiting Room (Zoom Security Menu)"
+        >
+          <ShieldCheck className="w-5 h-5" />
+        </button>
+
         {/* More Options Popover */}
         <div className="relative">
           <button
@@ -235,7 +306,7 @@ export default function ControlBar({
           {showMoreMenu && (
             <div className="absolute bottom-14 right-0 w-64 bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl p-2 space-y-1 z-50 animate-in fade-in zoom-in-95 text-xs text-slate-200">
               
-              {/* Visual effects */}
+              {/* Visual effects & Backdrops */}
               <button
                 onClick={() => {
                   onOpenBackgrounds();
@@ -244,7 +315,31 @@ export default function ControlBar({
                 className="w-full px-3 py-2 rounded-xl hover:bg-slate-800 flex items-center gap-2.5 text-left"
               >
                 <Sparkles className="w-4 h-4 text-indigo-400" />
-                <span>Apply visual effects (Blur & Backgrounds)</span>
+                <span>Virtual Backdrops & Lighting</span>
+              </button>
+
+              {/* AI Companion & Minutes */}
+              <button
+                onClick={() => {
+                  onOpenAICompanion();
+                  setShowMoreMenu(false);
+                }}
+                className="w-full px-3 py-2 rounded-xl hover:bg-slate-800 flex items-center gap-2.5 text-left"
+              >
+                <Bot className="w-4 h-4 text-indigo-400" />
+                <span>AI Companion (Duet & Zoom AI)</span>
+              </button>
+
+              {/* Timer & Agenda */}
+              <button
+                onClick={() => {
+                  onOpenAgendaTimer();
+                  setShowMoreMenu(false);
+                }}
+                className="w-full px-3 py-2 rounded-xl hover:bg-slate-800 flex items-center gap-2.5 text-left"
+              >
+                <Clock className="w-4 h-4 text-amber-400" />
+                <span>Speaker Timer & Agenda</span>
               </button>
 
               {/* Change layout */}
@@ -307,19 +402,17 @@ export default function ControlBar({
                 <span>Download Attendance Report (CSV)</span>
               </button>
 
-              {/* Host controls */}
-              {isHost && (
-                <button
-                  onClick={() => {
-                    onOpenHostControls();
-                    setShowMoreMenu(false);
-                  }}
-                  className="w-full px-3 py-2 rounded-xl hover:bg-slate-800 flex items-center gap-2.5 text-left"
-                >
-                  <ShieldCheck className="w-4 h-4 text-rose-400" />
-                  <span>Host controls (Safety & Locks)</span>
-                </button>
-              )}
+              {/* Security Shield */}
+              <button
+                onClick={() => {
+                  onOpenSecurityShield();
+                  setShowMoreMenu(false);
+                }}
+                className="w-full px-3 py-2 rounded-xl hover:bg-slate-800 flex items-center gap-2.5 text-left"
+              >
+                <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                <span>Security & Waiting Room</span>
+              </button>
 
               {/* Settings */}
               <button
@@ -339,7 +432,7 @@ export default function ControlBar({
         {/* End Call Button (Google Meet Signature Red Pill) */}
         <button
           onClick={onLeaveCall}
-          className="h-10 sm:h-11 px-5 rounded-full bg-rose-600 hover:bg-rose-700 text-white flex items-center justify-center gap-1.5 shadow-lg shadow-rose-600/30 transition-all hover:scale-105"
+          className="h-10 sm:h-11 px-4 sm:px-5 rounded-full bg-rose-600 hover:bg-rose-700 text-white flex items-center justify-center gap-1.5 shadow-lg shadow-rose-600/30 transition-all hover:scale-105"
           title="Leave call"
         >
           <PhoneOff className="w-5 h-5" />
@@ -348,7 +441,7 @@ export default function ControlBar({
 
       </div>
 
-      {/* Right Controls: Details, People, Chat, Activities, Host */}
+      {/* Right Controls: Details, People, Chat, Activities */}
       <div className="flex items-center gap-1 sm:gap-2">
         
         {/* Info */}
@@ -372,7 +465,7 @@ export default function ControlBar({
               ? 'bg-blue-600 text-white'
               : 'text-slate-400 hover:bg-slate-800 hover:text-white'
           }`}
-          title="People"
+          title="People & Waiting Room"
         >
           <Users className="w-5 h-5" />
           <span className="absolute -top-1 -right-1 px-1.5 py-0.2 rounded-full bg-slate-800 text-[10px] font-bold text-white border border-slate-700">
@@ -388,7 +481,7 @@ export default function ControlBar({
               ? 'bg-blue-600 text-white'
               : 'text-slate-400 hover:bg-slate-800 hover:text-white'
           }`}
-          title="Chat with everyone"
+          title="In-call chat & Direct Messaging"
         >
           <MessageSquare className="w-5 h-5" />
         </button>
@@ -401,7 +494,7 @@ export default function ControlBar({
               ? 'bg-blue-600 text-white'
               : 'text-slate-400 hover:bg-slate-800 hover:text-white'
           }`}
-          title="Activities (Polls, Q&A, Breakout)"
+          title="Activities (Polls, Q&A, Breakout rooms)"
         >
           <div className="flex items-center gap-0.5">
             <span className="w-2 h-2 rounded-full bg-blue-400" />
@@ -409,17 +502,6 @@ export default function ControlBar({
             <span className="w-0 h-0 border-l-[4px] border-l-transparent border-r-[4px] border-r-transparent border-b-[7px] border-b-rose-400" />
           </div>
         </button>
-
-        {/* Host Controls quick shield button (if Host) */}
-        {isHost && (
-          <button
-            onClick={onOpenHostControls}
-            className="p-2.5 rounded-full text-slate-400 hover:bg-slate-800 hover:text-white transition-colors"
-            title="Host controls"
-          >
-            <ShieldCheck className="w-5 h-5 text-blue-400" />
-          </button>
-        )}
 
       </div>
 

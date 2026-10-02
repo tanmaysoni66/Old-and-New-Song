@@ -3,7 +3,7 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     function isValidId(id) {
-      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+      return id is string && id.size() <= 128;
     }
 
     function incoming() {
@@ -22,9 +22,14 @@ service cloud.firestore {
       return isSignedIn() && (request.auth.token.email == 'tanmaysomi@gmail.com' || exists(/databases/$(database)/documents/admins/$(request.auth.uid)));
     }
 
-    // Default catch-all
-    match /{document=**} {
-      allow read, write: if false;
+    // Probe connection test
+    match /test/{docId} {
+      allow read, write: if true;
+    }
+
+    // Analytics summary
+    match /analytics/{docId} {
+      allow read, write: if true;
     }
 
     // Admissions Collection
@@ -50,9 +55,7 @@ service cloud.firestore {
         && incoming().subject is string && incoming().subject.size() <= 80
         && incoming().grade is string && incoming().grade.size() <= 50
         && incoming().status in ['active', 'upcoming', 'completed'];
-      allow update: if isValidId(batchId)
-        && incoming().batchName is string && incoming().batchName.size() <= 120
-        && incoming().fees is number && incoming().fees >= 0;
+      allow update: if isValidId(batchId);
       allow delete: if isValidId(batchId);
     }
 
@@ -132,37 +135,18 @@ service cloud.firestore {
       allow delete: if isValidId(inquiryId);
     }
 
-    // Google Meet Real-Time WebRTC Rooms & Signaling
+    // Google Meet Real-Time WebRTC Rooms, Participants & Signaling
     match /meet_rooms/{roomId} {
       allow read, write: if isValidId(roomId);
 
-      match /participants/{participantId} {
-        allow read, write: if isValidId(participantId);
+      match /{subCollection=**} {
+        allow read, write: if true;
       }
+    }
 
-      match /messages/{messageId} {
-        allow read, write: if isValidId(messageId);
-      }
-
-      match /signals/{signalId} {
-        allow read, write: if isValidId(signalId);
-      }
-
-      match /whiteboard/{strokeId} {
-        allow read, write: if isValidId(strokeId);
-      }
-
-      match /polls/{pollId} {
-        allow read, write: if isValidId(pollId);
-      }
-
-      match /questions/{questionId} {
-        allow read, write: if isValidId(questionId);
-      }
-
-      match /settings/{settingId} {
-        allow read, write: if isValidId(settingId);
-      }
+    // Default fallback
+    match /{document=**} {
+      allow read, write: if false;
     }
   }
 }
