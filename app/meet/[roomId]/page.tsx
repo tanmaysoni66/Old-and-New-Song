@@ -29,7 +29,8 @@ import {
   UserCheck,
   UserX,
   Lock,
-  Calendar
+  Calendar,
+  XCircle
 } from 'lucide-react';
 import { 
   doc, 
@@ -126,6 +127,8 @@ export default function MeetingRoomPage() {
   // Waiting Room & Knocking List (Zoom Waiting Room & Google Meet Knock)
   const [waitingList, setWaitingList] = useState<WaitingParticipant[]>([]);
   const [topKnockNotice, setTopKnockNotice] = useState<WaitingParticipant | null>(null);
+  const [myKnockStatus, setMyKnockStatus] = useState<'idle' | 'pending' | 'admitted' | 'denied'>('idle');
+  const [deniedCountdown, setDeniedCountdown] = useState(3);
 
   // AI Meeting Transcript Log
   const [transcript, setTranscript] = useState<TranscriptItem[]>([
@@ -175,6 +178,13 @@ export default function MeetingRoomPage() {
   // Refs
   const webrtcManagerRef = useRef<WebRTCMeetingManager | null>(null);
   const myPeerIdRef = useRef<string>('');
+
+  const isHostBySession = typeof window !== 'undefined' && (
+    new URLSearchParams(window.location.search).get('host') === 'true' || 
+    sessionStorage.getItem('isMeetHost_' + roomId) === 'true'
+  );
+  const myParticipantDoc = participants.find(p => p.peerId === myPeerIdRef.current);
+  const isMeHost = claimedHost || isHostBySession || (myParticipantDoc ? myParticipantDoc.isHost : (participants.length === 0));
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordedChunksRef = useRef<Blob[]>([]);
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -322,6 +332,91 @@ export default function MeetingRoomPage() {
 
     return () => unsubscribe();
   }, [roomId]);
+
+  // 1. Participant: Listen for my own knocking status in Firestore
+  useEffect(() => {
+    if (!roomId || !myPeerIdRef.current || hasJoined) return;
+
+    const knockDocRef = doc(db, 'meet_rooms', roomId, 'knocks', myPeerIdRef.current);
+    const unsubscribe = onSnapshot(
+      knockDocRef,
+      (docSnap) => {
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          if (data.status === 'admitted') {
+            setMyKnockStatus('admitted');
+            setIsWaitingInLobby(false);
+            soundManager.playJoinSound();
+            handleJoinMeeting(false);
+          } else if (data.status === 'denied') {
+            setMyKnockStatus('denied');
+            soundManager.playLeaveSound();
+          } else if (data.status === 'pending') {
+            setMyKnockStatus('pending');
+            setIsWaitingInLobby(true);
+          }
+        }
+      },
+      (err) => {
+        console.warn('My knock listener notice:', err);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [roomId, hasJoined]);
+
+  // Handle countdown and auto-redirect when guest entry is denied
+  useEffect(() => {
+    if (myKnockStatus !== 'denied') return;
+
+    setDeniedCountdown(3);
+    const timer = setInterval(() => {
+      setDeniedCountdown((prev) => {
+        if (prev <= 1) {
+          clearInterval(timer);
+          router.push('/');
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [myKnockStatus, router]);
+
+  // 2. Host: Listen for incoming guest knocks in real-time
+  useEffect(() => {
+    if (!roomId || !isMeHost) return;
+
+    const knocksRef = collection(db, 'meet_rooms', roomId, 'knocks');
+    const unsubscribe = onSnapshot(
+      knocksRef,
+      (snapshot) => {
+        const pendingKnocks: WaitingParticipant[] = [];
+        snapshot.forEach((d) => {
+          const data = d.data();
+          if (data.status === 'pending') {
+            pendingKnocks.push({
+              id: d.id,
+              name: data.name || 'Guest',
+              requestedAt: data.requestedAt || Date.now(),
+            });
+          }
+        });
+        setWaitingList(pendingKnocks);
+        if (pendingKnocks.length > 0) {
+          setTopKnockNotice(pendingKnocks[pendingKnocks.length - 1]);
+        } else {
+          setTopKnockNotice(null);
+        }
+      },
+      (err) => {
+        console.warn('Host knocks listener notice:', err);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [roomId, isMeHost]);
 
   // Speech Recognition setup for Live Captions (CC) and AI Transcript
   useEffect(() => {
@@ -630,36 +725,92 @@ export default function MeetingRoomPage() {
     }
   };
 
-  // Waiting Room Management
-  const handleAdmitGuest = (id: string) => {
-    const guest = waitingList.find(g => g.id === id);
-    if (!guest) return;
-
+  // Real-time Firestore Waiting Room Management (Host Actions)
+  const handleAdmitGuest = async (id: string) => {
     soundManager.playJoinSound();
+    try {
+      const knockDocRef = doc(db, 'meet_rooms', roomId, 'knocks', id);
+      await setDoc(knockDocRef, { status: 'admitted', updatedAt: Date.now() }, { merge: true });
+    } catch (e) {
+      console.warn('Admit guest Firestore notice:', e);
+    }
+
     setWaitingList(prev => prev.filter(g => g.id !== id));
     if (topKnockNotice?.id === id) {
       setTopKnockNotice(null);
     }
-
-    // Add admitted guest directly as simulated or real participant
-    handleAddTestPeerNamed(guest.name);
   };
 
-  const handleDenyGuest = (id: string) => {
+  const handleDenyGuest = async (id: string) => {
     soundManager.playLeaveSound();
+    try {
+      const knockDocRef = doc(db, 'meet_rooms', roomId, 'knocks', id);
+      await setDoc(knockDocRef, { status: 'denied', updatedAt: Date.now() }, { merge: true });
+    } catch (e) {
+      console.warn('Deny guest Firestore notice:', e);
+    }
+
     setWaitingList(prev => prev.filter(g => g.id !== id));
     if (topKnockNotice?.id === id) {
       setTopKnockNotice(null);
     }
   };
 
-  const handleAdmitAll = () => {
+  const handleAdmitAll = async () => {
     soundManager.playJoinSound();
-    waitingList.forEach(w => {
-      handleAddTestPeerNamed(w.name);
-    });
+    for (const w of waitingList) {
+      try {
+        const knockDocRef = doc(db, 'meet_rooms', roomId, 'knocks', w.id);
+        await setDoc(knockDocRef, { status: 'admitted', updatedAt: Date.now() }, { merge: true });
+      } catch (e) {
+        console.warn('Admit all Firestore notice:', e);
+      }
+    }
     setWaitingList([]);
     setTopKnockNotice(null);
+  };
+
+  // Participant Request to Join (Knock in Waiting Room)
+  const handleRequestToJoin = async (presentImmediately: boolean = false) => {
+    if (!displayName.trim()) {
+      alert('Please enter your name (कृपया अपना नाम दर्ज करें)');
+      return;
+    }
+
+    if (isMeHost) {
+      // Host enters immediately
+      handleJoinMeeting(presentImmediately);
+      return;
+    }
+
+    // Put participant in Waiting Room Lobby
+    setIsWaitingInLobby(true);
+    setMyKnockStatus('pending');
+    soundManager.playDoorbellSound();
+
+    try {
+      const knockDocRef = doc(db, 'meet_rooms', roomId, 'knocks', myPeerIdRef.current);
+      await setDoc(knockDocRef, {
+        peerId: myPeerIdRef.current,
+        name: displayName.trim(),
+        status: 'pending',
+        requestedAt: Date.now(),
+      });
+    } catch (e) {
+      console.warn('Knock request Firestore notice:', e);
+    }
+  };
+
+  // Cancel Knock & Return to Green Room
+  const handleCancelKnock = async () => {
+    setIsWaitingInLobby(false);
+    setMyKnockStatus('idle');
+    try {
+      const knockDocRef = doc(db, 'meet_rooms', roomId, 'knocks', myPeerIdRef.current);
+      await deleteDoc(knockDocRef);
+    } catch (e) {
+      console.warn('Cancel knock notice:', e);
+    }
   };
 
   // Simulate a Knocking Guest in Waiting Room (for instant testing by host)
@@ -800,13 +951,6 @@ export default function MeetingRoomPage() {
     }
   };
 
-  const isHostBySession = typeof window !== 'undefined' && (
-    new URLSearchParams(window.location.search).get('host') === 'true' || 
-    sessionStorage.getItem('isMeetHost_' + roomId) === 'true'
-  );
-  const myParticipantDoc = participants.find(p => p.peerId === myPeerIdRef.current);
-  const isMeHost = claimedHost || isHostBySession || (myParticipantDoc ? myParticipantDoc.isHost : (participants.length === 0));
-
   // Compute full participants list
   const allParticipantsList: ParticipantInfo[] = [
     {
@@ -831,7 +975,40 @@ export default function MeetingRoomPage() {
   // =========================================================================
   // VIEW 1: WAITING ROOM LOBBY (Zoom Waiting Room & Google Meet Lobby)
   // =========================================================================
-  if (isWaitingInLobby) {
+  if (isWaitingInLobby || myKnockStatus === 'denied') {
+    if (myKnockStatus === 'denied') {
+      return (
+        <div className="min-h-screen bg-slate-950 text-white flex flex-col font-sans select-none items-center justify-center p-4">
+          <div className="max-w-md w-full bg-slate-900 border border-rose-500/40 rounded-3xl p-8 text-center space-y-6 shadow-2xl animate-in zoom-in-95">
+            <div className="w-16 h-16 mx-auto rounded-3xl bg-rose-600/20 text-rose-400 flex items-center justify-center border border-rose-500/30">
+              <XCircle className="w-8 h-8 text-rose-400" />
+            </div>
+
+            <div className="space-y-2">
+              <h2 className="text-xl font-bold text-white">
+                Request Denied by Host
+              </h2>
+              <p className="text-xs text-rose-300 font-medium">
+                एडमिन ने मीटिंग में शामिल होने का अनुरोध अस्वीकार कर दिया है।
+              </p>
+              <p className="text-[11px] text-slate-400 pt-1">
+                Redirecting to home page in <strong className="text-white font-mono">{deniedCountdown}</strong> seconds...
+              </p>
+            </div>
+
+            <div className="pt-2">
+              <button
+                onClick={() => router.push('/')}
+                className="w-full py-3 rounded-full bg-rose-600 hover:bg-rose-500 text-white font-semibold text-xs transition-colors shadow-lg shadow-rose-600/25"
+              >
+                Return to Home Page Now (होम पेज पर जाएं)
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div className="min-h-screen bg-slate-950 text-white flex flex-col font-sans select-none items-center justify-center p-4">
         <div className="max-w-md w-full bg-slate-900 border border-slate-800 rounded-3xl p-8 text-center space-y-6 shadow-2xl animate-in zoom-in-95">
@@ -841,9 +1018,12 @@ export default function MeetingRoomPage() {
 
           <div className="space-y-2">
             <h2 className="text-xl font-bold text-white">
-              Please wait, the meeting host will let you in soon.
+              Waiting for Host Approval...
             </h2>
-            <p className="text-xs text-slate-400">
+            <p className="text-xs text-indigo-300 font-medium">
+              कृपया प्रतीक्षा करें, एडमिन को आपके जुड़ने की सूचना भेज दी गई है।
+            </p>
+            <p className="text-[11px] text-slate-400">
               Meeting ID: <span className="font-mono text-indigo-400 font-semibold">{roomId}</span>
             </p>
           </div>
@@ -864,24 +1044,27 @@ export default function MeetingRoomPage() {
                 Camera is off
               </div>
             )}
-            <div className="absolute bottom-2 left-2 px-2.5 py-1 rounded-full bg-black/60 text-white text-[11px] font-medium backdrop-blur-md">
-              {displayName} (Knocking...)
+            <div className="absolute bottom-2 left-2 px-2.5 py-1 rounded-full bg-black/60 text-white text-[11px] font-medium backdrop-blur-md flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
+              <span>{displayName} (Waiting in Lobby...)</span>
             </div>
           </div>
 
           <div className="space-y-3 pt-2">
-            <button
-              onClick={() => handleJoinMeeting(false)}
-              className="w-full py-3 rounded-full bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs transition-colors shadow-lg shadow-indigo-600/25"
-            >
-              Enter Call Directly (Host Override)
-            </button>
+            {isMeHost && (
+              <button
+                onClick={() => handleJoinMeeting(false)}
+                className="w-full py-3 rounded-full bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs transition-colors shadow-lg shadow-indigo-600/25"
+              >
+                Enter Call Directly (Host Override)
+              </button>
+            )}
 
             <button
-              onClick={() => setIsWaitingInLobby(false)}
+              onClick={handleCancelKnock}
               className="w-full py-2.5 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium text-xs transition-colors"
             >
-              Return to Lobby
+              Cancel Request &amp; Return to Green Room
             </button>
           </div>
         </div>
@@ -1072,18 +1255,18 @@ export default function MeetingRoomPage() {
             {/* Joining Actions */}
             <div className="space-y-3 pt-2">
               <button
-                onClick={() => handleJoinMeeting(false)}
+                onClick={() => handleRequestToJoin(false)}
                 className="w-full py-3.5 rounded-full bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm shadow-xl shadow-blue-600/30 flex items-center justify-center gap-2 transition-all hover:scale-102"
               >
-                Join now (अभी जुड़ें)
+                {isMeHost ? 'Start Meeting (मीटिंग शुरू करें)' : 'Ask to join (जुड़ने के लिए अनुरोध करें)'}
               </button>
 
               <button
-                onClick={() => handleJoinMeeting(true)}
+                onClick={() => handleRequestToJoin(true)}
                 className="w-full py-3 rounded-full bg-slate-900 hover:bg-slate-800 text-slate-300 text-xs font-semibold border border-slate-800 flex items-center justify-center gap-2 transition-colors"
               >
                 <MonitorUp className="w-4 h-4 text-blue-400" />
-                Present (स्क्रीन शेयर करके जुड़ें)
+                {isMeHost ? 'Present & Start (स्क्रीन शेयर करके शुरू करें)' : 'Present to Call (स्क्रीन शेयर के साथ जुड़ें)'}
               </button>
             </div>
 
