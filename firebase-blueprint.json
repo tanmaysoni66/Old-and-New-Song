@@ -1,0 +1,200 @@
+{
+  "entities": {
+    "Admission": {
+      "title": "Admission",
+      "description": "Student admission application record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "studentName": { "type": "string", "maxLength": 100 },
+        "parentName": { "type": "string", "maxLength": 100 },
+        "grade": { "type": "string", "maxLength": 50 },
+        "previousScore": { "type": "string", "maxLength": 20 },
+        "phone": { "type": "string", "maxLength": 20 },
+        "email": { "type": "string", "maxLength": 100 },
+        "status": { "type": "string", "enum": ["pending", "approved", "rejected"] },
+        "appliedAt": { "type": "string" },
+        "notes": { "type": "string", "maxLength": 500 }
+      },
+      "required": ["studentName", "parentName", "grade", "phone", "status"]
+    },
+    "CoachingBatch": {
+      "title": "CoachingBatch",
+      "description": "Coaching batch or course session",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "batchName": { "type": "string", "maxLength": 120 },
+        "fees": { "type": "number" },
+        "subject": { "type": "string", "maxLength": 80 },
+        "grade": { "type": "string", "maxLength": 50 },
+        "batchTiming": { "type": "string", "maxLength": 100 },
+        "syllabus": { "type": "string", "maxLength": 1000 },
+        "capacity": { "type": "number" },
+        "enrolledCount": { "type": "number" },
+        "status": { "type": "string", "enum": ["active", "upcoming", "completed"] },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["batchName", "fees", "subject", "grade", "batchTiming", "status"]
+    },
+    "StudyNote": {
+      "title": "StudyNote",
+      "description": "Study note or book in catalog",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string", "maxLength": 150 },
+        "subject": { "type": "string", "maxLength": 80 },
+        "grade": { "type": "string", "maxLength": 50 },
+        "price": { "type": "number" },
+        "isFreeSample": { "type": "boolean" },
+        "pagesCount": { "type": "number" },
+        "description": { "type": "string", "maxLength": 1000 },
+        "downloadCount": { "type": "number" },
+        "watermarkEnabled": { "type": "boolean" },
+        "sampleText": { "type": "string", "maxLength": 2000 },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["title", "subject", "grade", "price", "isFreeSample"]
+    },
+    "VideoLecture": {
+      "title": "VideoLecture",
+      "description": "Video lecture or recording link",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string", "maxLength": 150 },
+        "videoUrl": { "type": "string", "maxLength": 300 },
+        "videoType": { "type": "string", "enum": ["youtube", "vimeo", "mp4"] },
+        "subject": { "type": "string", "maxLength": 80 },
+        "batchId": { "type": "string", "maxLength": 100 },
+        "batchName": { "type": "string", "maxLength": 120 },
+        "duration": { "type": "string", "maxLength": 30 },
+        "pdfMaterialUrl": { "type": "string", "maxLength": 300 },
+        "description": { "type": "string", "maxLength": 1000 },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["title", "videoUrl", "videoType", "subject", "batchName"]
+    },
+    "MockTest": {
+      "title": "MockTest",
+      "description": "Online mock test series and questions",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "topic": { "type": "string", "maxLength": 150 },
+        "subject": { "type": "string", "maxLength": 80 },
+        "grade": { "type": "string", "maxLength": 50 },
+        "totalQuestions": { "type": "number" },
+        "passingMarks": { "type": "number" },
+        "durationMinutes": { "type": "number" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["topic", "subject", "totalQuestions", "passingMarks", "durationMinutes"]
+    },
+    "TestResult": {
+      "title": "TestResult",
+      "description": "Student mock test result and score",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "testId": { "type": "string", "maxLength": 100 },
+        "testTopic": { "type": "string", "maxLength": 150 },
+        "studentName": { "type": "string", "maxLength": 100 },
+        "studentEmail": { "type": "string", "maxLength": 100 },
+        "score": { "type": "number" },
+        "totalMarks": { "type": "number" },
+        "percentage": { "type": "number" },
+        "passed": { "type": "boolean" },
+        "submittedAt": { "type": "string" }
+      },
+      "required": ["testId", "testTopic", "studentName", "score", "totalMarks", "percentage"]
+    },
+    "BlogArticle": {
+      "title": "BlogArticle",
+      "description": "Educational blog and news update",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string", "maxLength": 200 },
+        "category": { "type": "string", "maxLength": 80 },
+        "excerpt": { "type": "string", "maxLength": 500 },
+        "content": { "type": "string", "maxLength": 10000 },
+        "author": { "type": "string", "maxLength": 100 },
+        "readTime": { "type": "string", "maxLength": 30 },
+        "published": { "type": "boolean" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["title", "category", "excerpt", "content", "author"]
+    },
+    "ContactInquiry": {
+      "title": "ContactInquiry",
+      "description": "Student or parent inquiry and contact message",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string", "maxLength": 100 },
+        "email": { "type": "string", "maxLength": 100 },
+        "phone": { "type": "string", "maxLength": 20 },
+        "subject": { "type": "string", "maxLength": 150 },
+        "message": { "type": "string", "maxLength": 1000 },
+        "status": { "type": "string", "enum": ["pending", "contacted", "resolved"] },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["name", "email", "phone", "message", "status"]
+    },
+    "MeetRoom": {
+      "title": "MeetRoom",
+      "description": "Google Meet live meeting room with WebRTC signaling",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "roomId": { "type": "string", "maxLength": 50 },
+        "title": { "type": "string", "maxLength": 150 },
+        "hostName": { "type": "string", "maxLength": 100 },
+        "hostPeerId": { "type": "string", "maxLength": 100 },
+        "isActive": { "type": "boolean" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["roomId", "title", "hostName"]
+    }
+  },
+  "firestore": {
+    "/admissions/{admissionId}": {
+      "schema": "Admission",
+      "description": "Collection of student admission forms"
+    },
+    "/batches/{batchId}": {
+      "schema": "CoachingBatch",
+      "description": "Collection of coaching batches and courses"
+    },
+    "/notes/{noteId}": {
+      "schema": "StudyNote",
+      "description": "Collection of digital study notes and books"
+    },
+    "/videos/{videoId}": {
+      "schema": "VideoLecture",
+      "description": "Collection of recorded and live video lectures"
+    },
+    "/mock_tests/{testId}": {
+      "schema": "MockTest",
+      "description": "Collection of mock test series"
+    },
+    "/test_results/{resultId}": {
+      "schema": "TestResult",
+      "description": "Collection of mock test results and scores"
+    },
+    "/blogs/{blogId}": {
+      "schema": "BlogArticle",
+      "description": "Collection of educational articles and news updates"
+    },
+    "/inquiries/{inquiryId}": {
+      "schema": "ContactInquiry",
+      "description": "Collection of messages from contact form"
+    },
+    "/meet_rooms/{roomId}": {
+      "schema": "MeetRoom",
+      "description": "Google Meet video rooms and signaling root"
+    }
+  }
+}

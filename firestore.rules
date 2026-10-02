@@ -1,0 +1,156 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (request.auth.token.email == 'tanmaysomi@gmail.com' || exists(/databases/$(database)/documents/admins/$(request.auth.uid)));
+    }
+
+    // Default catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Admissions Collection
+    match /admissions/{admissionId} {
+      allow read: if true;
+      allow create: if isValidId(admissionId)
+        && incoming().studentName is string && incoming().studentName.size() <= 100
+        && incoming().parentName is string && incoming().parentName.size() <= 100
+        && incoming().grade is string && incoming().grade.size() <= 50
+        && incoming().phone is string && incoming().phone.size() <= 20
+        && incoming().status in ['pending', 'approved', 'rejected'];
+      allow update: if isValidId(admissionId)
+        && incoming().status in ['pending', 'approved', 'rejected'];
+      allow delete: if isValidId(admissionId);
+    }
+
+    // Coaching Batches Collection
+    match /batches/{batchId} {
+      allow read: if true;
+      allow create: if isValidId(batchId)
+        && incoming().batchName is string && incoming().batchName.size() <= 120
+        && incoming().fees is number && incoming().fees >= 0
+        && incoming().subject is string && incoming().subject.size() <= 80
+        && incoming().grade is string && incoming().grade.size() <= 50
+        && incoming().status in ['active', 'upcoming', 'completed'];
+      allow update: if isValidId(batchId)
+        && incoming().batchName is string && incoming().batchName.size() <= 120
+        && incoming().fees is number && incoming().fees >= 0;
+      allow delete: if isValidId(batchId);
+    }
+
+    // Study Notes Store Collection
+    match /notes/{noteId} {
+      allow read: if true;
+      allow create: if isValidId(noteId)
+        && incoming().title is string && incoming().title.size() <= 150
+        && incoming().subject is string && incoming().subject.size() <= 80
+        && incoming().grade is string && incoming().grade.size() <= 50
+        && incoming().price is number && incoming().price >= 0
+        && incoming().isFreeSample is bool;
+      allow update: if isValidId(noteId);
+      allow delete: if isValidId(noteId);
+    }
+
+    // Video Lectures Collection
+    match /videos/{videoId} {
+      allow read: if true;
+      allow create: if isValidId(videoId)
+        && incoming().title is string && incoming().title.size() <= 150
+        && incoming().videoUrl is string && incoming().videoUrl.size() <= 300
+        && incoming().videoType in ['youtube', 'vimeo', 'mp4']
+        && incoming().subject is string && incoming().subject.size() <= 80;
+      allow update: if isValidId(videoId);
+      allow delete: if isValidId(videoId);
+    }
+
+    // Mock Tests Collection
+    match /mock_tests/{testId} {
+      allow read: if true;
+      allow create: if isValidId(testId)
+        && incoming().topic is string && incoming().topic.size() <= 150
+        && incoming().subject is string && incoming().subject.size() <= 80
+        && incoming().totalQuestions is number && incoming().totalQuestions > 0
+        && incoming().passingMarks is number && incoming().passingMarks >= 0;
+      allow update: if isValidId(testId);
+      allow delete: if isValidId(testId);
+    }
+
+    // Test Results Collection
+    match /test_results/{resultId} {
+      allow read: if true;
+      allow create: if isValidId(resultId)
+        && incoming().testId is string && incoming().testId.size() <= 100
+        && incoming().studentName is string && incoming().studentName.size() <= 100
+        && incoming().score is number && incoming().score >= 0
+        && incoming().totalMarks is number && incoming().totalMarks > 0
+        && incoming().percentage is number && incoming().percentage >= 0 && incoming().percentage <= 100;
+      allow update: if isValidId(resultId);
+      allow delete: if isValidId(resultId);
+    }
+
+    // Blog Articles Collection
+    match /blogs/{blogId} {
+      allow read: if true;
+      allow create: if isValidId(blogId)
+        && incoming().title is string && incoming().title.size() <= 200
+        && incoming().category is string && incoming().category.size() <= 80
+        && incoming().excerpt is string && incoming().excerpt.size() <= 500
+        && incoming().content is string && incoming().content.size() <= 10000;
+      allow update: if isValidId(blogId);
+      allow delete: if isValidId(blogId);
+    }
+
+    // Contact Inquiries Collection
+    match /inquiries/{inquiryId} {
+      allow read: if true;
+      allow create: if isValidId(inquiryId)
+        && incoming().name is string && incoming().name.size() <= 100
+        && incoming().email is string && incoming().email.size() <= 100
+        && incoming().phone is string && incoming().phone.size() <= 20
+        && incoming().message is string && incoming().message.size() <= 1000
+        && incoming().status in ['pending', 'contacted', 'resolved'];
+      allow update: if isValidId(inquiryId)
+        && incoming().status in ['pending', 'contacted', 'resolved'];
+      allow delete: if isValidId(inquiryId);
+    }
+
+    // Google Meet Real-Time WebRTC Rooms & Signaling
+    match /meet_rooms/{roomId} {
+      allow read, write: if isValidId(roomId);
+
+      match /participants/{participantId} {
+        allow read, write: if isValidId(participantId);
+      }
+
+      match /messages/{messageId} {
+        allow read, write: if isValidId(messageId);
+      }
+
+      match /signals/{signalId} {
+        allow read, write: if isValidId(signalId);
+      }
+
+      match /whiteboard/{strokeId} {
+        allow read, write: if isValidId(strokeId);
+      }
+    }
+  }
+}
